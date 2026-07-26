@@ -1,0 +1,39 @@
+#import <UIKit/UIKit.h>
+
+extern NSString * const ThemeDidChangeNotification;
+
+@interface ThemeManager : NSObject
+
+@property (class, readonly) ThemeManager *shared;
+
+@property (nonatomic) UIColor *accentColor;
+@property (nonatomic) UIColor *accentHoverColor;
+@property (nonatomic) UIUserInterfaceStyle interfaceStyle;
+
+@property (nonatomic) UIColor *backgroundColor;
+@property (nonatomic) UIColor *cardBackgroundColor;
+@property (nonatomic) UIColor *sidebarBackgroundColor;
+@property (nonatomic) UIColor *topBarBackgroundColor;
+@property (nonatomic) UIColor *rightPanelBackgroundColor;
+@property (nonatomic, readonly) UIColor *primaryTextColor;
+@property (nonatomic, readonly) UIColor *secondaryTextColor;
+@property (nonatomic, readonly) UIColor *separatorColor;
+@property (nonatomic, readonly) UIColor *successColor;
+@property (nonatomic, readonly) UIColor *warningColor;
+@property (nonatomic, readonly) UIColor *errorColor;
+@property (nonatomic, readonly) UIColor *buttonTextColor;
+
+@property (nonatomic) UIImage *backgroundImage;
+@property (nonatomic) UIImage *blurredBackgroundImage;
+@property (nonatomic) CGFloat backgroundBlurIntensity;
+@property (nonatomic) CGFloat uiOpacity;
+
+- (void)applyAccentColor:(UIColor *)color;
+- (void)applyColor:(UIColor *)color forKey:(NSString *)key;
+- (void)applyInterfaceStyle:(UIUserInterfaceStyle)style;
+- (void)applyThemeToAllWindows;
+- (void)resetAppearance;
+- (void)broadcastThemeChange;
+- (void)updateBackgroundBlur;
+
+@end
