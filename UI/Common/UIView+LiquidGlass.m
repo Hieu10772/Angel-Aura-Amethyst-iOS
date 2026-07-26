@@ -25,10 +25,11 @@ static void * const kLiquidGlassKey = (void*)&kLiquidGlassKey;
     effectView.clipsToBounds = YES;
     effectView.userInteractionEnabled = NO;
 
-    if (@available(iOS 26, *)) {
-        UIGlassEffect *glass = [[UIGlassEffect alloc] init];
+    Class glassClass = NSClassFromString(@"UIGlassEffect");
+    if (glassClass) {
+        id glass = [[glassClass alloc] init];
         if (tintColor) {
-            glass.tintColor = tintColor;
+            [glass setTintColor:tintColor];
         }
         effectView.effect = glass;
     } else {
