@@ -8,7 +8,7 @@ set(CMAKE_DEPENDS_LANGUAGES
 
 # The set of dependency files which are needed:
 set(CMAKE_DEPENDS_DEPENDENCY_FILES
-  "/Volumes/D/Amethyst-iOS-25/Natives/audio_capture_bridge.m" "CMakeFiles/audio_capture.dir/audio_capture_bridge.m.o" "gcc" "CMakeFiles/audio_capture.dir/audio_capture_bridge.m.o.d"
+  "/Volumes/D/Angel-Aura-Amethyst-iOS/Angel-Aura-Amethyst-iOS/Natives/audio_capture_bridge.m" "CMakeFiles/audio_capture.dir/audio_capture_bridge.m.o" "gcc" "CMakeFiles/audio_capture.dir/audio_capture_bridge.m.o.d"
   )
 
 # Targets to which this target links which contain Fortran sources.

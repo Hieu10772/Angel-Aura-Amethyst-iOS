@@ -247,11 +247,17 @@ add_executable(AngelAuraAmethyst
   SurfaceViewController+LogView.m
   SurfaceViewController+Navigation.m
   TrackedTextField.m
-   egl_bridge.m
-   ZinkConfig.m
-   input_bridge_v3.m
-   ios_uikit_bridge.m
-   utils.m
+egl_bridge.m
+    ZinkConfig.m
+    input_bridge_v3.m
+    ios_uikit_bridge.m
+    utils.m
+
+    touchcontroller_launcher.c
+    touchcontroller_vibration.m
+    touchcontroller_keyboard.m
+    TouchControllerManager.m
+    touchcontroller_jni_bridge.c
 
    # UI
    ../UI/Common/ThemeManager.m

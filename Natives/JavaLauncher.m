@@ -21,6 +21,12 @@
 #import "PLLogOutputView.h"
 #import "PLProfiles.h"
 #import "VersionDirectoryManager.h"
+#import "TouchControllerManager.h"
+
+static NSString *dhNativeLibPath = nil;
+
+// Forward declaration for DH fix
+static void checkAndAddDhNativeLibPath(NSString *versionId);
 
 #define fm NSFileManager.defaultManager
 
@@ -189,6 +195,7 @@ int launchJVM(NSString *username, id launchTarget, int width, int height, int mi
     init_loadCustomEnv();
     init_loadMobileGluesConfig();
 
+    DeviceGetJITFlags(YES);
     BOOL requiresTXMWorkaround = DeviceHasJITFlags(JIT_FLAG_FORCE_MIRRORED | JIT_FLAG_HAS_TXM);
     BOOL jit26AlwaysAttached = getPrefBool(@"debug.debug_always_attached_jit");
     if (requiresTXMWorkaround) {
@@ -219,17 +226,14 @@ int launchJVM(NSString *username, id launchTarget, int width, int height, int mi
         // make sure we don't get stuck in EXC_BAD_ACCESS
         task_set_exception_ports(mach_task_self(), EXC_MASK_BAD_ACCESS, 0, EXCEPTION_DEFAULT, MACHINE_THREAD_STATE);
     }
-    if (!requiresTXMWorkaround || jit26AlwaysAttached) {
-        if (jit26AlwaysAttached) {
-            // Only allow StikDebug to catch our breakpoints to prevent any stutters
-            task_set_exception_ports(mach_task_self(), EXC_MASK_ALL & ~EXC_MASK_BREAKPOINT, 0,
-                EXCEPTION_DEFAULT, THREAD_STATE_NONE);
-        }
-        // Activate Library Validation bypass for external runtime and dylibs (JNA, etc)
-        init_bypassDyldLibValidation();
-    } else {
-        NSLog(@"[DyldLVBypass] Hook disabled! Loading unsigned dylib will cause code signature error.");
+    // Always activate Library Validation bypass for unsigned dylib support.
+    // The TXM workaround handles JIT memory; dyld bypass handles code signing.
+    if (jit26AlwaysAttached) {
+        // Only allow StikDebug to catch our breakpoints to prevent any stutters
+        task_set_exception_ports(mach_task_self(), EXC_MASK_ALL & ~EXC_MASK_BREAKPOINT, 0,
+            EXCEPTION_DEFAULT, THREAD_STATE_NONE);
     }
+    init_bypassDyldLibValidation();
 
     BOOL launchJar = ![launchTarget isKindOfClass:NSDictionary.class];
     NSString *gameDir;
@@ -297,6 +301,13 @@ int launchJVM(NSString *username, id launchTarget, int width, int height, int mi
     setenv("JAVA_HOME", javaHome.UTF8String, 1);
     NSLog(@"[JavaLauncher] JAVA_HOME has been set to %@", javaHome);
 
+    // ==================== Distant Horizons Fix ====================
+    // Pre-extract and sign zstd-jni native library to avoid code signature error on iOS
+    NSString *versionId = [PLProfiles resolveKeyForCurrentProfile:@"lastVersionId"];
+    if (versionId) {
+        checkAndAddDhNativeLibPath(versionId);
+    }
+
     int allocmem;
     if (getPrefBool(@"java.auto_ram")) {
         CGFloat autoRatio = getEntitlementValue(@"com.apple.private.memorystatus") ? 0.4 : 0.25;
@@ -325,7 +336,14 @@ int launchJVM(NSString *username, id launchTarget, int width, int height, int mi
     }
     margv[++margc] = "-Xms128M";
     margv[++margc] = [NSString stringWithFormat:@"-Xmx%dM", allocmem].UTF8String;
-    margv[++margc] = [NSString stringWithFormat:@"-Djava.library.path=%@/Frameworks", NSBundle.mainBundle.bundlePath].UTF8String;
+    
+    // Add DH native library path if available
+    NSString *javaLibraryPath = [NSBundle.mainBundle.bundlePath stringByAppendingPathComponent:@"Frameworks"];
+    if (dhNativeLibPath) {
+        javaLibraryPath = [NSString stringWithFormat:@"%@:%@", javaLibraryPath, dhNativeLibPath];
+    }
+    margv[++margc] = [NSString stringWithFormat:@"-Djava.library.path=%@", javaLibraryPath].UTF8String;
+    
     margv[++margc] = [NSString stringWithFormat:@"-Duser.dir=%@", gameDir].UTF8String;
     margv[++margc] = [NSString stringWithFormat:@"-Duser.home=%s", getenv("POJAV_HOME")].UTF8String;
     margv[++margc] = [NSString stringWithFormat:@"-Duser.timezone=%@", NSTimeZone.localTimeZone.name].UTF8String;
@@ -551,4 +569,30 @@ int launchJVM(NSString *username, id launchTarget, int width, int height, int mi
                    "java", "openjdk",
                    /* (const_jargs != NULL) ? JNI_TRUE : */ JNI_FALSE,
                    JNI_TRUE, JNI_FALSE, JNI_TRUE);
+}
+
+// ==================== Distant Horizons Native Library Fix ====================
+// On iOS, DH mod extracts libzstd-jni_dh-1.5.7-6.dylib to a temp directory,
+// but the relocation process invalidates the code signature, causing crash.
+// Fix: Pre-extract the library from DH jar, sign it with ad-hoc signature,
+// and add its directory to java.library.path
+
+// This function checks if the library exists and is signed; if not, it will
+// be handled by the Java side (Tools.java) via extractDhNativeLibraries()
+// We just check here and add the path if available.
+static void checkAndAddDhNativeLibPath(NSString *versionId) {
+    if (!versionId) return;
+    
+    NSString *extractDir = [NSString stringWithFormat:@"%s/dh_natives", getenv("POJAV_HOME")];
+    NSString *targetLibPath = [extractDir stringByAppendingPathComponent:@"libzstd-jni_dh-1.5.7-6.dylib"];
+    
+    NSFileManager *fileManager = [NSFileManager defaultManager];
+    if ([fileManager fileExistsAtPath:targetLibPath]) {
+        dhNativeLibPath = extractDir;
+        NSLog(@"[DH Fix] Adding native library path: %@", dhNativeLibPath);
+    } else {
+        // Will be extracted by Java side before JVM launch
+        dhNativeLibPath = extractDir;
+        NSLog(@"[DH Fix] Will use native library path: %@ (extraction by Java)", dhNativeLibPath);
+    }
 }

@@ -21,6 +21,8 @@
 #import "UIKit+hook.h"
 #import "ios_uikit_bridge.h"
 
+#import "touchcontroller_jni_bridge.h"
+
 #include "glfw_keycodes.h"
 #include "utils.h"
 
@@ -33,6 +35,9 @@ static int currentHotbarSlot = -1;
 static GameSurfaceView* pojavWindow;
 
 @interface SurfaceViewController ()<UITextFieldDelegate, UIGestureRecognizerDelegate> {
+    // TouchController integration
+    NSUInteger nextTouchControllerIndex;
+    NSMutableDictionary<UITouch*, NSNumber*>* touchControllerIndexMap;
 }
 
 @property(nonatomic) NSDictionary* metadata;
@@ -79,6 +84,12 @@ static GameSurfaceView* pojavWindow;
     return self;
 }
 
+- (UIInterfaceOrientationMask)supportedInterfaceOrientations {
+    if (getPrefBool(@"general.lock_landscape")) {
+        return UIInterfaceOrientationMaskLandscape;
+    }
+    return [super supportedInterfaceOrientations];
+}
 - (void)viewDidLoad
 {
     [super viewDidLoad];
@@ -124,6 +135,10 @@ static GameSurfaceView* pojavWindow;
     self.ctrlView = [[ControlLayout alloc] initWithFrame:getSafeArea(self.view.frame)];
 
     [self performSelector:@selector(initCategory_Navigation)];
+    
+    // Initialize TouchController touch tracking
+    nextTouchControllerIndex = 1;
+    touchControllerIndexMap = [NSMutableDictionary dictionary];
     
     self.surfaceView = [[GameSurfaceView alloc] initWithFrame:self.view.frame];
     self.surfaceView.layer.contentsScale = screenScale * resolutionScale;
@@ -218,7 +233,8 @@ static GameSurfaceView* pojavWindow;
         NSLog(@"Input: Mouse connected!");
         GCMouse* mouse = note.object;
         [self registerMouseCallbacks:mouse];
-        self.mousePointerView.hidden = isGrabbing || !virtualMouseEnabled;
+        virtualMouseEnabled = YES;
+    self.mousePointerView.hidden = isGrabbing;
         [self setNeedsUpdateOfPrefersPointerLocked];
     }];
     self.mouseDisconnectCallback = [[NSNotificationCenter defaultCenter] addObserverForName:GCMouseDidDisconnectNotification object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *note) {
@@ -230,7 +246,7 @@ static GameSurfaceView* pojavWindow;
         mouse.mouseInput.rightButton.pressedChangedHandler = nil;
         [mouse.mouseInput.auxiliaryButtons makeObjectsPerformSelector:@selector(setPressedChangedHandler:) withObject:nil];
         [self setNeedsUpdateOfPrefersPointerLocked];
-        if (getPrefBool(@"controll.hardware_hide")) {
+        if (getPrefBool(@"control.hardware_hide")) {
             self.ctrlView.hidden = NO;
         }
     }];
@@ -271,6 +287,7 @@ static GameSurfaceView* pojavWindow;
     // [self setPreferredFramesPerSecond:1000];
     [self updateJetsamControl];
     [self updatePreferenceChanges];
+    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(updateSavedResolution) name:@"ResolutionDidChangeNotification" object:nil];
     [self loadCustomControls];
 
     if (UIApplication.sharedApplication.connectedScenes.count > 1 &&
@@ -624,6 +641,10 @@ static GameSurfaceView* pojavWindow;
 #pragma mark - Input: on-surface functions
 
 - (BOOL)gestureRecognizer:(UIGestureRecognizer *)gestureRecognizer shouldRecognizeSimultaneouslyWithGestureRecognizer:(UIGestureRecognizer *)otherGestureRecognizer {
+    if ([gestureRecognizer isKindOfClass:[UIScreenEdgePanGestureRecognizer class]] ||
+        [otherGestureRecognizer isKindOfClass:[UIScreenEdgePanGestureRecognizer class]]) {
+        return NO;
+    }
     return YES;
 }
 
@@ -640,9 +661,38 @@ static GameSurfaceView* pojavWindow;
     }
 }
 
+#import "touchcontroller_jni_bridge.h"
+
 - (void)sendTouchEvent:(UITouch *)touchEvent withUIEvent:(UIEvent *)uievent withEvent:(int)event
 {
     CGPoint locationInView = [touchEvent locationInView:self.rootView];
+
+    // Convert to normalized coordinates [0, 1] relative to game view
+    CGFloat gameWidth = self.surfaceView.frame.size.width;
+    CGFloat gameHeight = self.surfaceView.frame.size.height;
+    float normX = locationInView.x / gameWidth;
+    float normY = locationInView.y / gameHeight;
+    normX = MAX(0.0f, MIN(1.0f, normX));
+    normY = MAX(0.0f, MIN(1.0f, normY));
+
+    // TouchController integration
+    if (event == ACTION_DOWN) {
+        int index = touchcontroller_onTouchDown(normX, normY);
+        if (index >= 0) {
+            [touchControllerIndexMap setObject:@(index) forKey:touchEvent];
+        }
+    } else if (event == ACTION_MOVE || event == ACTION_MOVE_MOTION) {
+        NSNumber* indexObj = [touchControllerIndexMap objectForKey:touchEvent];
+        if (indexObj) {
+            touchcontroller_onTouchMove([indexObj intValue], normX, normY);
+        }
+    } else if (event == ACTION_UP || event == ACTION_CANCEL) {
+        NSNumber* indexObj = [touchControllerIndexMap objectForKey:touchEvent];
+        if (indexObj) {
+            touchcontroller_onTouchUp([indexObj intValue]);
+            [touchControllerIndexMap removeObjectForKey:touchEvent];
+        }
+    }
 
     //if (touchEvent.view == self.surfaceView) {
         switch (event) {
@@ -687,8 +737,17 @@ static GameSurfaceView* pojavWindow;
             if (event == ACTION_MOVE && isGrabbing) {
                 event = ACTION_MOVE_MOTION;
                 CGPoint prevLocationInView = [touchEvent previousLocationInView:self.rootView];
+                float deltaX = locationInView.x - prevLocationInView.x;
+                float deltaY = locationInView.y - prevLocationInView.y;
                 locationInView.x -= prevLocationInView.x;
                 locationInView.y -= prevLocationInView.y;
+                
+                // TouchController: Send view movement for camera rotation
+                CGFloat gameWidth = self.surfaceView.frame.size.width;
+                CGFloat gameHeight = self.surfaceView.frame.size.height;
+                float normDeltaX = deltaX / gameWidth;
+                float normDeltaY = deltaY / gameHeight;
+                touchcontroller_onViewMove(normDeltaY, normDeltaX); // pitch = Y, yaw = X
             }
             [self sendTouchPoint:locationInView withEvent:event];
         }
@@ -696,25 +755,28 @@ static GameSurfaceView* pojavWindow;
 }
 
 - (void)pressesBegan:(NSSet<UIPress *> *)presses withEvent:(UIPressesEvent *)event {
+    BOOL handled = NO;
     for (UIPress *press in presses) {
-        if (press.key != nil) {
-            [KeyboardInput sendKeyEvent:press.key down:YES];
+        if (press.key != nil && [KeyboardInput sendKeyEvent:press.key down:YES]) {
+            handled = YES;
         }
     }
-    // Always call super so that inputTextField (UITextInput) can receive
-    // key events for text input (e.g., Minecraft chat).
-    [super pressesBegan:presses withEvent:event];
+    self.inputTextField.skipNextTextInsertion = handled;
+    if (!handled) {
+        [super pressesBegan:presses withEvent:event];
+    }
 }
 
 - (void)pressesEnded:(NSSet<UIPress *> *)presses withEvent:(UIPressesEvent *)event {
+    BOOL handled = NO;
     for (UIPress *press in presses) {
-        if (press.key != nil) {
-            [KeyboardInput sendKeyEvent:press.key down:NO];
+        if (press.key != nil && [KeyboardInput sendKeyEvent:press.key down:NO]) {
+            handled = YES;
         }
     }
-    // Always call super so that inputTextField (UITextInput) can receive
-    // key-up events properly.
-    [super pressesEnded:presses withEvent:event];
+    if (!handled) {
+        [super pressesEnded:presses withEvent:event];
+    }
 }
 
 - (BOOL)prefersPointerLocked {
@@ -724,11 +786,10 @@ static GameSurfaceView* pojavWindow;
 - (void)registerMouseCallbacks:(GCMouse *)mouse {
     NSLog(@"Input: Got mouse %@", mouse);
     mouse.mouseInput.mouseMovedHandler = ^(GCMouseInput * _Nonnull mouse, float deltaX, float deltaY) {
-        // Always forward mouse movement to the game.
-        // When pointer is locked (in-game grabbing), deltaX/deltaY are true deltas.
-        // When pointer is NOT locked (menu, or Bluetooth mouse before lock activates),
-        // we still send the delta so the virtual mouse or cursor can move.
-        [self sendTouchPoint:CGPointMake(deltaX, -deltaY) withEvent:ACTION_MOVE_MOTION];
+        CGPoint delta = CGPointMake(deltaX, -deltaY);
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [self sendTouchPoint:delta withEvent:ACTION_MOVE_MOTION];
+        });
     };
 
     mouse.mouseInput.leftButton.pressedChangedHandler = ^(GCControllerButtonInput * _Nonnull button, float value, BOOL pressed) {
@@ -1115,6 +1176,9 @@ int touchesMovedCount;
 {
     [super touchesCancelled:touches withEvent:event];
     [self touchesEndedGlobal:touches withEvent:event];
+    
+    // Cancel all TouchController pointers
+    touchcontroller_onTouchCancel();
 }
 
 + (BOOL)isRunning {

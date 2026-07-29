@@ -14,6 +14,7 @@
 #define ACTION_UP 1
 #define ACTION_MOVE 2
 #define ACTION_MOVE_MOTION 3
+#define ACTION_CANCEL 4
 
 #define BUTTON1_DOWN_MASK 1 << 10 // left btn
 #define BUTTON2_DOWN_MASK 1 << 11 // mid btn
@@ -77,6 +78,10 @@ typedef enum {
 } JITFlags;
 JITFlags DeviceGetJITFlags(BOOL refresh);
 BOOL DeviceHasJITFlags(JITFlags flags);
+BOOL DeviceHasTXMReal(void);
+BOOL JIT26IsLikelyDebuggerKeepAttached(void);
+
+void handle_fatal_exit(int code);
 
 // Init functions
 void init_bypassDyldLibValidation();

@@ -153,6 +153,7 @@ static CGPoint lastCenterPoint;
 }
 
 - (void)actionOpenNavigationMenu {
+    [self animateMenuScale:0.7 duration:0.3];
 }
 
 - (UIRectEdge)preferredScreenEdgesDeferringSystemGestures {

@@ -41,6 +41,8 @@
 @property (nonatomic) BOOL hasLoadedVersions;
 @property (nonatomic) BOOL versionsExpanded;
 @property (nonatomic) BOOL isModpack;
+@property (nonatomic) NSURLSessionDownloadTask *currentDownloadTask;
+@property (nonatomic) NSMutableArray *currentModDownloadTasks;
 
 @property (nonatomic) UIButton *mcVersionBtn;
 @property (nonatomic) NSString *selectedMcVersion;
@@ -56,11 +58,27 @@ static NSString *const kVerCell = @"VerCell";
     if (self) {
         _mod = mod;
         _selectedVersionIndex = -1;
-        _selectedLoader = @"fabric";
+        [self detectDefaultLoader];
     _dependencyMods = [NSMutableArray array];
     _versionsExpanded = YES;
 }
     return self;
+}
+
+- (void)detectDefaultLoader {
+    _selectedLoader = @"fabric";
+    VersionProfile *profile = VersionDirectoryManager.shared.currentProfile;
+    if (profile) {
+        NSString *loader = [profile.modLoader lowercaseString];
+        if (loader.length > 0 && ![loader isEqualToString:@"vanilla"]) {
+            _selectedLoader = loader;
+            return;
+        }
+    }
+    NSString *internalLoader = [getPrefObject(@"internal.mod_loader") lowercaseString] ?: @"";
+    if (internalLoader.length > 0 && ![internalLoader isEqualToString:@"vanilla"]) {
+        _selectedLoader = internalLoader;
+    }
 }
 
 - (void)viewDidLoad {
@@ -513,7 +531,12 @@ static NSString *const kVerCell = @"VerCell";
     DownloadProgressOverlay *overlay = [DownloadProgressOverlay showInView:self.view title:@"Downloading Mod"];
     [overlay updateProgress:0 message:@"Downloading..."];
 
-    [ModrinthService.shared downloadFile:url name:filename progressBlock:^(float p) {
+    __weak typeof(self) weakSelf = self;
+    [overlay setCancelBlock:^{
+        [weakSelf.currentDownloadTask cancel];
+        weakSelf.currentDownloadTask = nil;
+    }];
+    weakSelf.currentDownloadTask = [ModrinthService.shared downloadFile:url name:filename progressBlock:^(float p) {
         [overlay updateProgress:p message:[NSString stringWithFormat:@"Downloading %@", filename]];
     } completion:^(NSString *dlPath, NSError *error) {
         if (dlPath) {
@@ -580,18 +603,35 @@ static NSString *const kVerCell = @"VerCell";
     DownloadProgressOverlay *overlay = [DownloadProgressOverlay showInView:self.view title:@"Installing"];
     [overlay updateProgress:0 message:@"Downloading..."];
 
-    [DownloadManager.shared downloadMod:url name:filename version:mcVersion completion:^(BOOL success, NSError *error) {
-        if (success) {
-            [overlay finishWithMessage:@"Installed!"];
-            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 1.5 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
-                [overlay dismiss];
-                showDialog(@"Installed", [NSString stringWithFormat:@"%@ installed to profile.", _mod[@"title"]]);
-            });
-        } else {
-            [overlay finishWithMessage:@"Install failed"];
-            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 1.0 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
-                [overlay dismiss];
-            });
+    __weak typeof(self) weakSelf = self;
+    [overlay setCancelBlock:^{
+        [weakSelf.currentDownloadTask cancel];
+        weakSelf.currentDownloadTask = nil;
+    }];
+    weakSelf.currentDownloadTask = [ModrinthService.shared downloadFile:url name:filename progressBlock:^(float p) {
+        [overlay updateProgress:p message:@"Downloading..."];
+    } completion:^(NSString *path, NSError *dlError) {
+        if (path) {
+            [overlay updateProgress:1.0 message:@"Copying to profile..."];
+            NSString *modsDir = [VersionDirectoryManager.shared modsPathForVersion:mcVersion];
+            NSString *targetPath = [modsDir stringByAppendingPathComponent:filename];
+            if (![targetPath hasSuffix:@".jar"]) targetPath = [targetPath stringByAppendingPathExtension:@"jar"];
+            [[NSFileManager defaultManager] createDirectoryAtPath:modsDir withIntermediateDirectories:YES attributes:nil error:nil];
+            [[NSFileManager defaultManager] removeItemAtPath:targetPath error:nil];
+            NSError *moveError = nil;
+            [[NSFileManager defaultManager] moveItemAtPath:path toPath:targetPath error:&moveError];
+            if (moveError == nil) {
+                [overlay finishWithMessage:@"Installed!"];
+                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 1.5 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+                    [overlay dismiss];
+                    showDialog(@"Installed", [NSString stringWithFormat:@"%@ installed to profile.", _mod[@"title"]]);
+                });
+            } else {
+                [overlay finishWithMessage:@"Install failed"];
+                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 1.0 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+                    [overlay dismiss];
+                });
+            }
         }
     }];
 }
@@ -604,7 +644,11 @@ static NSString *const kVerCell = @"VerCell";
     NSString *filename = ver[@"filename"] ?: @"modpack.mrpack";
 
     __weak typeof(self) weakSelf = self;
-    [ModrinthService.shared downloadFile:url name:filename progressBlock:^(float p) {
+    [overlay setCancelBlock:^{
+        [weakSelf.currentDownloadTask cancel];
+        weakSelf.currentDownloadTask = nil;
+    }];
+    weakSelf.currentDownloadTask = [ModrinthService.shared downloadFile:url name:filename progressBlock:^(float p) {
         [overlay updateProgress:p message:@"Downloading modpack..."];
     } completion:^(NSString *dlPath, NSError *dlError) {
         if (!dlPath) {
@@ -958,18 +1002,35 @@ static NSString *const kVerCell = @"VerCell";
     DownloadProgressOverlay *overlay = [DownloadProgressOverlay showInView:self.view title:@"Downloading Dependency"];
     [overlay updateProgress:0 message:[NSString stringWithFormat:@"Downloading %@...", dep[@"title"]]];
 
-    [DownloadManager.shared downloadMod:url name:filename version:mcVersion completion:^(BOOL success, NSError *error) {
-        if (success) {
-            [overlay finishWithMessage:@"Installed!"];
-            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 1.5 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
-                [overlay dismiss];
-                showDialog(@"Installed", [NSString stringWithFormat:@"%@ installed to profile.", dep[@"title"]]);
-            });
-        } else {
-            [overlay finishWithMessage:@"Failed"];
-            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 1.0 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
-                [overlay dismiss];
-            });
+    __weak typeof(self) weakSelf = self;
+    [overlay setCancelBlock:^{
+        [weakSelf.currentDownloadTask cancel];
+        weakSelf.currentDownloadTask = nil;
+    }];
+    weakSelf.currentDownloadTask = [ModrinthService.shared downloadFile:url name:filename progressBlock:^(float p) {
+        [overlay updateProgress:p message:@"Downloading..."];
+    } completion:^(NSString *path, NSError *dlError) {
+        if (path) {
+            [overlay updateProgress:1.0 message:@"Copying to profile..."];
+            NSString *modsDir = [VersionDirectoryManager.shared modsPathForVersion:mcVersion];
+            NSString *targetPath = [modsDir stringByAppendingPathComponent:filename];
+            if (![targetPath hasSuffix:@".jar"]) targetPath = [targetPath stringByAppendingPathExtension:@"jar"];
+            [[NSFileManager defaultManager] createDirectoryAtPath:modsDir withIntermediateDirectories:YES attributes:nil error:nil];
+            [[NSFileManager defaultManager] removeItemAtPath:targetPath error:nil];
+            NSError *moveError = nil;
+            [[NSFileManager defaultManager] moveItemAtPath:path toPath:targetPath error:&moveError];
+            if (moveError == nil) {
+                [overlay finishWithMessage:@"Installed!"];
+                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 1.5 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+                    [overlay dismiss];
+                    showDialog(@"Installed", [NSString stringWithFormat:@"%@ installed to profile.", dep[@"title"]]);
+                });
+            } else {
+                [overlay finishWithMessage:@"Failed"];
+                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 1.0 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+                    [overlay dismiss];
+                });
+            }
         }
     }];
 }

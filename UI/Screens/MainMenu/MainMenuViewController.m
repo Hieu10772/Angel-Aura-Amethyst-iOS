@@ -4,6 +4,7 @@
 @interface MainMenuViewController () <WKNavigationDelegate>
 @property (nonatomic) WKWebView *webView;
 @property (nonatomic) UILabel *titleLabel;
+@property (nonatomic) UILabel *versionLabel;
 @property (nonatomic) UIActivityIndicatorView *loadingIndicator;
 @end
 
@@ -22,6 +23,13 @@
     _titleLabel.font = [UIFont systemFontOfSize:24 weight:UIFontWeightBold];
     _titleLabel.text = @"Angel Aura";
     [self.view addSubview:_titleLabel];
+
+    _versionLabel = [[UILabel alloc] init];
+    _versionLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    _versionLabel.font = [UIFont systemFontOfSize:11 weight:UIFontWeightRegular];
+    NSString *ver = NSBundle.mainBundle.infoDictionary[@"CFBundleShortVersionString"] ?: @"1.0";
+    _versionLabel.text = [NSString stringWithFormat:@"v%@", ver];
+    [self.view addSubview:_versionLabel];
 
     WKWebViewConfiguration *config = [[WKWebViewConfiguration alloc] init];
     _webView = [[WKWebView alloc] initWithFrame:CGRectZero configuration:config];
@@ -42,7 +50,10 @@
         [_titleLabel.topAnchor constraintEqualToAnchor:self.view.topAnchor constant:16],
         [_titleLabel.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:20],
 
-        [_webView.topAnchor constraintEqualToAnchor:_titleLabel.bottomAnchor constant:12],
+        [_versionLabel.topAnchor constraintEqualToAnchor:_titleLabel.bottomAnchor constant:2],
+        [_versionLabel.leadingAnchor constraintEqualToAnchor:_titleLabel.leadingAnchor constant:1],
+
+        [_webView.topAnchor constraintEqualToAnchor:_versionLabel.bottomAnchor constant:12],
         [_webView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:20],
         [_webView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-20],
         [_webView.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor constant:-16],
@@ -60,6 +71,7 @@
     ThemeManager *theme = ThemeManager.shared;
     self.view.backgroundColor = theme.backgroundColor;
     _titleLabel.textColor = theme.primaryTextColor;
+    _versionLabel.textColor = theme.secondaryTextColor;
 }
 
 - (void)webView:(WKWebView *)webView didStartProvisionalNavigation:(WKNavigation *)navigation {

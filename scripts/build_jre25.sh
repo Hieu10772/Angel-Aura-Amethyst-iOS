@@ -1,11 +1,7 @@
 #!/usr/bin/env bash
-# Downloads our iOS-built OpenJDK 25 from the vibecodest/Amethyst-iOS release
-# (built by .github/workflows/build-ios-jdk25.yml from OpenJDK source +
-# scripts/jdk25_ios_fixups.py — actual iOS-targeted compile, not retag).
+# Downloads the iOS-built OpenJDK 25 from assets.angelauramc.dev
 #
-# Earlier revision retagged macOS Adoptium binaries; that approach didn't work
-# because OpenJDK has macOS-specific code paths that fail at iOS runtime.
-# This version uses a real iOS-targeted build.
+# The release is a .zip containing a .tar.xz with the JRE contents.
 
 set -euo pipefail
 
@@ -18,13 +14,26 @@ if [ -f "$DEST_DIR/release" ] && [ -f "$DEST_DIR/lib/server/libjvm.dylib" ]; the
     exit 0
 fi
 
-echo "[jre25] downloading iOS-built OpenJDK 25 from release..."
+echo "[jre25] downloading iOS-built OpenJDK 25..."
 echo "[jre25]   $JRE_URL"
-curl -L --fail -o "$WORK_DIR/jre25.tar.xz" "$JRE_URL"
+curl -L --fail -o "$WORK_DIR/jre25.zip" "$JRE_URL"
+
+echo "[jre25] extracting zip..."
+cd "$WORK_DIR"
+unzip -o jre25.zip
+rm -f jre25.zip
+
+# The zip should contain a .tar.xz file
+TARBALL=(jre25-*.tar.xz)
+if [ ! -f "${TARBALL[0]}" ]; then
+    echo "[jre25] ERROR: no jre25-*.tar.xz found inside the zip"
+    ls -la "$WORK_DIR"
+    exit 1
+fi
 
 mkdir -p "$DEST_DIR"
-echo "[jre25] extracting to $DEST_DIR..."
-tar xf "$WORK_DIR/jre25.tar.xz" -C "$DEST_DIR"
+echo "[jre25] extracting ${TARBALL[0]} to $DEST_DIR..."
+tar xf "${TARBALL[0]}" -C "$DEST_DIR"
 
 # Sanity check: libjvm.dylib must exist and be tagged iOS.
 JVM="$DEST_DIR/lib/server/libjvm.dylib"

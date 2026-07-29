@@ -91,7 +91,8 @@
 }
 
 - (NSArray *)listFilesAtPath:(NSString *)path {
-    NSMutableArray *files = [NSFileManager.defaultManager contentsOfDirectoryAtPath:path error:nil].mutableCopy;
+    NSArray *dirContents = [NSFileManager.defaultManager contentsOfDirectoryAtPath:path error:nil];
+    NSMutableArray *files = dirContents ? [dirContents mutableCopy] : [NSMutableArray array];
     for (int i = 0; i < files.count;) {
         if ([files[i] hasSuffix:@".json"]) {
             i++;
@@ -368,6 +369,11 @@
                                                                    message:nil
                                                             preferredStyle:UIAlertControllerStyleActionSheet];
 
+    if (![options isKindOfClass:[NSArray class]] || options.count == 0) {
+        showDialog(@"No Options", @"No options available for this setting.");
+        return;
+    }
+
     if (isRenderer && [options.firstObject isKindOfClass:[NSDictionary class]]) {
         for (NSDictionary *opt in options) {
             NSString *key = opt[@"key"];
@@ -381,6 +387,7 @@
         }
     } else {
         for (NSString *opt in options) {
+            if (![opt isKindOfClass:[NSString class]]) continue;
             BOOL isSelected = [currentValue isEqualToString:opt];
             NSString *display = opt;
             if ([opt isEqualToString:@"(default)"]) display = opt;
@@ -437,17 +444,17 @@
     if ([type isEqualToString:@"installed"]) {
         list = localVersionList;
     } else {
-        list = [remoteVersionList filteredArrayUsingPredicate:[NSPredicate predicateWithFormat:@"(type == %@)", type]];
+        list = remoteVersionList ? [remoteVersionList filteredArrayUsingPredicate:[NSPredicate predicateWithFormat:@"(type == %@)", type]] : nil;
     }
 
-    if (list.count == 0) {
+    if (list == nil || list.count == 0) {
         showDialog(@"No Versions", [NSString stringWithFormat:@"No %@ versions found.", typeName]);
         return;
     }
 
     UIAlertController *subSheet = [UIAlertController alertControllerWithTitle:typeName
-                                                                      message:nil
-                                                               preferredStyle:UIAlertControllerStyleActionSheet];
+                                                                       message:nil
+                                                                preferredStyle:UIAlertControllerStyleActionSheet];
 
     NSInteger maxItems = MIN(list.count, 60);
     for (NSInteger i = 0; i < maxItems; i++) {
@@ -458,6 +465,7 @@
         } else {
             verId = [obj valueForKey:@"id"];
         }
+        if (verId.length == 0) continue;
         BOOL isSelected = [self.pendingVersion isEqualToString:verId];
         NSString *label = isSelected ? [NSString stringWithFormat:@"✓ %@", verId] : verId;
         [subSheet addAction:[UIAlertAction actionWithTitle:label style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
@@ -472,6 +480,9 @@
     if (UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPad) {
         subSheet.popoverPresentationController.sourceView = self.view;
         subSheet.popoverPresentationController.sourceRect = CGRectMake(CGRectGetMidX(self.view.bounds), CGRectGetMidY(self.view.bounds), 0, 0);
+    } else if (subSheet.actions.count > 10) {
+        subSheet.popoverPresentationController.sourceView = self.tableView;
+        subSheet.popoverPresentationController.sourceRect = [self.tableView rectForRowAtIndexPath:[NSIndexPath indexPathForRow:0 inSection:0]];
     }
 
     [self presentViewController:subSheet animated:YES completion:nil];

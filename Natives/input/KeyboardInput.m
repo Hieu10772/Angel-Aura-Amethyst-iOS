@@ -113,20 +113,15 @@ int keycodeTable[UIKeyboardHIDUsageKeyboardRightGUI+1];
         NSLog(@"KeyboardInput: Unhandled key %lu", (unsigned long)key.keyCode);
     }
 
-    // key.characters.length < 11: skip sending characters if the string starts with UIKeyInput
-    BOOL sentChars = NO;
-    if (isDown && key.characters.length > 0 && key.characters.length < 11) {
+    // Send characters (only via charMods; it has fallback to char callback)
+    if (isDown && key.characters.length < 11) {
         for (int i = 0; i < key.characters.length; i++) {
             int keychar = [key.characters characterAtIndex:i];
             CallbackBridge_nativeSendCharMods(keychar, modifiers);
-            CallbackBridge_nativeSendChar(keychar);
         }
-        sentChars = YES;
     }
 
-    // Return YES if we handled a known keycode OR sent character events,
-    // so that the caller knows this event was consumed.
-    return keycode != 0 || sentChars;
+    return keycode != 0 || isDown;
 }
 
 @end

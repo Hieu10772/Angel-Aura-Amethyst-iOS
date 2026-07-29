@@ -32,7 +32,8 @@ static PLLogOutputView* current;
         [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemTrash
             target:self action:@selector(actionClearLogOutput)]
     ];
-    vc.title = localize(@"game.menu.log_output", nil);
+    NSString *ver = NSBundle.mainBundle.infoDictionary[@"CFBundleShortVersionString"] ?: @"1.0";
+    vc.title = [NSString stringWithFormat:@"%@ v%@", localize(@"game.menu.log_output", nil), ver];
 
     self.logTableView = [[UITableView alloc] initWithFrame:frame];
     //self.logTableView.allowsSelection = NO;

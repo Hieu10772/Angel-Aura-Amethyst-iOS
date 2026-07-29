@@ -107,6 +107,28 @@ NSMutableArray<NSDictionary *> *localVersionList, *remoteVersionList;
             library[@"downloads"][@"artifact"][@"path"] = @"org/ow2/asm/asm-all/5.0.4/asm-all-5.0.4.jar";
             library[@"downloads"][@"artifact"][@"sha1"] = @"e6244859997b3d4237a552669279780876228909";
             library[@"downloads"][@"artifact"][@"url"] = @"https://repo1.maven.org/maven2/org/ow2/asm/asm-all/5.0.4/asm-all-5.0.4.jar";
+        } else if ([library[@"name"] hasPrefix:@"org.ow2.asm:asm:"] ||
+                   [library[@"name"] hasPrefix:@"org.ow2.asm:asm-analysis:"] ||
+                   [library[@"name"] hasPrefix:@"org.ow2.asm:asm-commons:"] ||
+                   [library[@"name"] hasPrefix:@"org.ow2.asm:asm-tree:"] ||
+                   [library[@"name"] hasPrefix:@"org.ow2.asm:asm-util:"]) {
+            // Replace ASM < 9.7.1 with 9.7.1 for Java 25 class file support (major version 69)
+            if (version.count >= 2) {
+                int major = version[0].intValue;
+                int minor = version[1].intValue;
+                int patch = version.count > 2 ? version[2].intValue : 0;
+                if (major > 9 || (major == 9 && minor > 7) || (major == 9 && minor == 7 && patch >= 1)) {
+                    continue;
+                }
+            }
+            NSString *asmArtifact = nameParts[1];
+            library[@"name"] = [NSString stringWithFormat:@"org.ow2.asm:%@:9.7.1", asmArtifact];
+            library[@"url"] = @"https://repo1.maven.org/maven2/";
+            library[@"downloads"] = [@{@"artifact": @{
+                @"path": [NSString stringWithFormat:@"org/ow2/asm/%@/9.7.1/%@-9.7.1.jar", asmArtifact, asmArtifact],
+                @"url": [NSString stringWithFormat:@"https://repo1.maven.org/maven2/org/ow2/asm/%@/9.7.1/%@-9.7.1.jar", asmArtifact, asmArtifact],
+                @"sha1": @""
+            }} mutableCopy];
         }
     }
 

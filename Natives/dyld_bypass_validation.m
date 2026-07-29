@@ -60,6 +60,7 @@ bool redirectFunctionDirect(char *name, void *patchAddr, void *target) {
     kret = builtin_vm_protect(mach_task_self(), (vm_address_t)patchAddr, sizeof(patch), false, PROT_READ | PROT_EXEC);
     if (kret != KERN_SUCCESS) {
         NSDebugLog(@"[DyldLVBypass] vm_protect(RX) fails at line %d", __LINE__);
+        builtin_vm_protect(mach_task_self(), (vm_address_t)patchAddr, sizeof(patch), false, PROT_READ);
         return FALSE;
     }
     
@@ -110,9 +111,27 @@ bool redirectFunctionHWBreakpoint(char *name, void *patchAddr, void *target) {
     return FALSE;
 }
 
+size_t getDyldTextSize(void *dyldBase) {
+    struct mach_header_64 *header = (struct mach_header_64 *)dyldBase;
+    if (header->magic != MH_MAGIC_64) return 0x200000;
+    uint8_t *cur = (uint8_t *)dyldBase + sizeof(struct mach_header_64);
+    for (uint32_t i = 0; i < header->ncmds; i++) {
+        struct load_command *lc = (struct load_command *)cur;
+        if (lc->cmd == LC_SEGMENT_64) {
+            struct segment_command_64 *seg = (struct segment_command_64 *)cur;
+            if (strcmp(seg->segname, "__TEXT") == 0) {
+                return seg->vmsize;
+            }
+        }
+        cur += lc->cmdsize;
+    }
+    return 0x200000;
+}
+
 bool searchAndPatch(char *name, char *base, char *signature, int length, void *target) {
     char *patchAddr = NULL;
-    for(int i=0; i < 0x80000; i+=4) {
+    size_t searchSize = getDyldTextSize(base);
+    for(size_t i=0; i < searchSize; i+=4) {
         if (base[i] == signature[0] && memcmp(base+i, signature, length) == 0) {
             patchAddr = base + i;
             break;
@@ -120,7 +139,7 @@ bool searchAndPatch(char *name, char *base, char *signature, int length, void *t
     }
     
     if (patchAddr == NULL) {
-        NSDebugLog(@"[DyldLVBypass] hook %s fails line %d", name, __LINE__);
+        NSDebugLog(@"[DyldLVBypass] hook %s fails line %d (searchSize=0x%zx)", name, __LINE__, searchSize);
         return FALSE;
     }
     
@@ -228,27 +247,26 @@ void init_bypassDyldLibValidation() {
 
     NSDebugLog(@"[DyldLVBypass] init");
 
-    // The original switch used exact bitmask matching, so a device with
-    // IS_IOS_26 + HAS_TXM (no FORCE_MIRRORED) — i.e. a normal iPhone 17 on
-    // iOS 26 with StikDebug-provided JIT — fell through to redirectFunction
-    // Direct, whose vm_protect(RX) call iOS 26 blocks. The half-applied
-    // patch left dyld code pages RW with modified bytes, then dyld faulted
-    // executing non-X memory on the next mmap call → SIGBUS ignored → hang
-    // at dlopen(libjli). Use bitmask checks so iOS 26 + TXM correctly picks
-    // the mirrored variant.
-    if (DeviceHasJITFlags(JIT_FLAG_HAS_TXM) &&
-        (DeviceHasJITFlags(JIT_FLAG_IS_IOS_26) || DeviceHasJITFlags(JIT_FLAG_FORCE_MIRRORED))) {
-        NSDebugLog(@"[DyldLVBypass] Using redirectFunctionMirrored");
-        redirectFunction = redirectFunctionMirrored;
-    } else if (DeviceHasJITFlags(JIT_FLAG_FORCE_MIRRORED)) {
-        // Special special case for non-TXM iOS 26+. We can JIT without
-        // script, but we cannot modify existing code in dsc without it.
-        // Use hardware breakpoint to avoid patching dsc code at all.
-        NSDebugLog(@"[DyldLVBypass] Using redirectFunctionHWBreakpoint");
-        redirectFunction = redirectFunctionHWBreakpoint;
-    } else {
-        NSDebugLog(@"[DyldLVBypass] Using redirectFunctionDirect");
-        redirectFunction = redirectFunctionDirect;
+    // Switch-based logic: strip IS_IOS_26 flag then decide redirect strategy.
+    // This ensures a device with HAS_TXM but without FORCE_MIRRORED (i.e. JIT
+    // debugger attached, can create RX maps) uses redirectFunctionDirect.
+    // On iOS 26+ TXM where vm_protect(RX) fails, redirectFunctionDirect will
+    // safely revert to PROT_READ and return FALSE instead of leaving RW pages.
+    int jitFlags = (int)DeviceGetJITFlags(NO);
+    jitFlags &= ~JIT_FLAG_IS_IOS_26;
+    switch (jitFlags) {
+        case JIT_FLAG_FORCE_MIRRORED | JIT_FLAG_HAS_TXM:
+            NSDebugLog(@"[DyldLVBypass] Using redirectFunctionMirrored");
+            redirectFunction = redirectFunctionMirrored;
+            break;
+        case JIT_FLAG_FORCE_MIRRORED:
+            NSDebugLog(@"[DyldLVBypass] Using redirectFunctionHWBreakpoint");
+            redirectFunction = redirectFunctionHWBreakpoint;
+            break;
+        default:
+            NSDebugLog(@"[DyldLVBypass] Using redirectFunctionDirect");
+            redirectFunction = redirectFunctionDirect;
+            break;
     }
     
     // Modifying exec page during execution may cause SIGBUS, so ignore it now
@@ -267,7 +285,8 @@ void init_bypassDyldLibValidation() {
     if(!fcntlPatchSuccess) {
         char* fcntlAddr = 0;
         // search all syscalls and see if the the instruction before it is a branch instruction
-        for(int i=0; i < 0x80000; i+=4) {
+        size_t searchSize = getDyldTextSize(dyldBase);
+        for(size_t i=0; i < searchSize; i+=4) {
             if (dyldBase[i] == syscallSig[0] && memcmp(dyldBase+i, syscallSig, 4) == 0) {
                 char* syscallAddr = dyldBase + i;
                 uint32_t* prev = (uint32_t*)(syscallAddr - 4);

@@ -201,13 +201,13 @@ BOOL leftShiftHeld;
     // GameController automatically performs deadzone calculations
     // so we just take the raw input
     if (lastFrameTime != 0 && (lastXValue != 0 || lastYValue != 0)) {
-        CGFloat acceleration = pow(MathUtils_dist(0, 0, lastXValue, lastYValue), MOUSE_MAX_ACCELERATION); // magnitude
+        CGFloat acceleration = pow(MathUtils_dist(0, 0, lastXValue, lastYValue), MOUSE_MAX_ACCELERATION);
         if (acceleration > 1) acceleration = 1;
 
-        // Compute delta since last tick time
-        CGFloat deltaX = lastXValue * acceleration * 18;
-        CGFloat deltaY = -lastYValue * acceleration * 18;
-        CGFloat deltaTimeScale = (frameTime - lastFrameTime) / (1.0/60.0); // Scale of 1 = 60Hz
+        CGFloat sensitivity = getPrefFloat(@"control.gamepad_sensitivity") / 100.0;
+        CGFloat deltaX = lastXValue * acceleration * 18 * sensitivity;
+        CGFloat deltaY = -lastYValue * acceleration * 18 * sensitivity;
+        CGFloat deltaTimeScale = (frameTime - lastFrameTime) / (1.0/60.0);
         deltaX *= deltaTimeScale;
         deltaY *= deltaTimeScale;
 

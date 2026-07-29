@@ -21,6 +21,7 @@
 #include "ZinkConfig.h"
 
 int clientAPI;
+__thread basic_render_window_t* currentBundle;
 
 void JNI_LWJGL_changeRenderer(const char* value_c) {
     JNIEnv *env;

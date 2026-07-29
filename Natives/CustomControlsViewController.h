@@ -26,6 +26,7 @@ typedef void (^SetDefaultCtrlBlock)(NSString *);
 - (void)doRemoveButton:(ControlButton *)button;
 - (void)doMoveOrResizeButton:(ControlButton *)button from:(CGRect)from to:(CGRect)to;
 - (void)doUpdateButton:(ControlButton *)button from:(NSMutableDictionary *)from to:(NSMutableDictionary *)to;
+- (void)doCopyButton:(ControlButton *)button;
 @end
 
 @interface CCMenuViewController : UIViewController

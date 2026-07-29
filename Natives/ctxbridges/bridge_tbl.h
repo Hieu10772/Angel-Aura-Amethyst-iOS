@@ -24,7 +24,7 @@ void (*br_setup_window)();
 void (*br_swap_interval)(int swapInterval);
 void (*br_terminate)();
 
-static __thread basic_render_window_t* currentBundle;
+extern __thread basic_render_window_t* currentBundle;
 static inline basic_render_window_t* br_get_current() {
     return currentBundle;
 }

@@ -138,7 +138,7 @@
 
     NSNumber *downloads = mod[@"downloads"];
     NSString *dlStr = downloads ? [self formatNumber:downloads] : @"0";
-    _downloadsLabel.text = [NSString stringWithFormat:@"↑ %@ downloads", dlStr];
+    _downloadsLabel.text = [NSString stringWithFormat:@"\u2191 %@ downloads", dlStr];
 
     _descLabel.text = mod[@"description"];
 
@@ -212,18 +212,7 @@
 @property (nonatomic) UILabel *emptyLabel;
 @property (nonatomic) UILabel *errorLabel;
 @property (nonatomic) NSTimer *timeoutTimer;
-
-@property (nonatomic) UITableView *versionTable;
-@property (nonatomic) NSArray *localVersions;
-@property (nonatomic) NSString *selectedVersion;
-@property (nonatomic) NSString *selectedModloader;
-@property (nonatomic) NSDictionary *selectedMod;
-@property (nonatomic) UIButton *downloadBtn;
-@property (nonatomic) UIButton *installBtn;
-@property (nonatomic) UIButton *loaderBtn;
-@property (nonatomic) UISegmentedControl *sourceControl;
-@property (nonatomic) NSString *selectedSource; // "modrinth" or "curseforge"
-@property (nonatomic) NSInteger currentRequestId;
+@property (nonatomic) NSString *selectedSource;
 
 @property (nonatomic) NSMutableDictionary *pageCache;
 @property (nonatomic) NSMutableArray *pageOffsets;
@@ -231,6 +220,19 @@
 @property (nonatomic) BOOL hasMore;
 @property (nonatomic) BOOL isLoadingMore;
 @property (nonatomic) NSString *currentQuery;
+
+@property (nonatomic) UIButton *downloadBtn;
+@property (nonatomic) UIButton *installBtn;
+@property (nonatomic) UISegmentedControl *sourceControl;
+@property (nonatomic) NSDictionary *selectedMod;
+@property (nonatomic) NSInteger currentRequestId;
+
+@property (nonatomic) NSURLSessionDownloadTask *currentDownloadTask;
+@property (nonatomic) NSMutableArray *currentModDownloadTasks;
+
+@property (nonatomic) NSInteger lastContentOffsetY;
+@property (nonatomic) NSInteger pageSize;
+@property (nonatomic) BOOL isRestoringPage;
 @end
 
 @implementation ModListViewController
@@ -250,25 +252,9 @@
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    NSString *versionsDir = VersionDirectoryManager.shared.versionsRootPath;
-    NSArray *contents = [[NSFileManager defaultManager] contentsOfDirectoryAtPath:versionsDir error:nil];
-    NSMutableArray *vers = [NSMutableArray array];
-    for (NSString *item in contents) {
-        NSString *fullPath = [versionsDir stringByAppendingPathComponent:item];
-        BOOL isDir = NO;
-        if ([[NSFileManager defaultManager] fileExistsAtPath:fullPath isDirectory:&isDir] && isDir) {
-            [vers addObject:item];
-        }
-    }
-    _localVersions = [vers sortedArrayUsingSelector:@selector(localizedStandardCompare:)];
-    VersionProfile *profile = VersionDirectoryManager.shared.currentProfile;
-    if (profile.mcVersion) {
-        _selectedVersion = profile.mcVersion;
-    } else {
-        _selectedVersion = VersionDirectoryManager.shared.currentVersion ?: @"";
-    }
-    _selectedModloader = profile.modLoader ?: getPrefObject(@"internal.mod_loader") ?: @"Vanilla";
     _selectedSource = @"modrinth";
+    _currentModDownloadTasks = [NSMutableArray array];
+    _pageSize = 50;
 
     _pageCache = [NSMutableDictionary dictionary];
     _pageOffsets = [NSMutableArray array];
@@ -276,11 +262,12 @@
     _hasMore = YES;
     _isLoadingMore = NO;
     _mods = [NSMutableArray array];
+    _lastContentOffsetY = 0;
 
     [self setup];
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(updateColors) name:ThemeDidChangeNotification object:nil];
-    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(versionDidChange:) name:@"VersionDidChangeNotification" object:nil];
     [self updateColors];
+    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(versionDidChangeExternal) name:@"VersionDidChangeNotification" object:nil];
     [self loadModsWithQuery:@"" offset:0];
 }
 
@@ -335,46 +322,6 @@
     [_sourceControl setTitleTextAttributes:@{NSForegroundColorAttributeName: UIColor.whiteColor} forState:UIControlStateSelected];
     [_sourceControl addTarget:self action:@selector(sourceChanged) forControlEvents:UIControlEventValueChanged];
     [sidePanel addSubview:_sourceControl];
-
-    UILabel *verHeader = [[UILabel alloc] init];
-    verHeader.translatesAutoresizingMaskIntoConstraints = NO;
-    verHeader.text = @"Version";
-    verHeader.font = [UIFont systemFontOfSize:13 weight:UIFontWeightSemibold];
-    verHeader.textColor = ThemeManager.shared.primaryTextColor;
-    [sidePanel addSubview:verHeader];
-
-    _versionTable = [[UITableView alloc] init];
-    _versionTable.translatesAutoresizingMaskIntoConstraints = NO;
-    _versionTable.delegate = self;
-    _versionTable.dataSource = self;
-    _versionTable.backgroundColor = [UIColor clearColor];
-    _versionTable.layer.cornerRadius = 6;
-    _versionTable.layer.borderWidth = 1;
-    _versionTable.layer.borderColor = ThemeManager.shared.separatorColor.CGColor;
-    _versionTable.rowHeight = 28;
-    _versionTable.separatorInset = UIEdgeInsetsZero;
-    _versionTable.scrollEnabled = YES;
-    [_versionTable registerClass:[UITableViewCell class] forCellReuseIdentifier:@"VerCell"];
-    [sidePanel addSubview:_versionTable];
-
-    UILabel *loaderLabel = [[UILabel alloc] init];
-    loaderLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    loaderLabel.text = @"Modloader";
-    loaderLabel.font = [UIFont systemFontOfSize:13 weight:UIFontWeightSemibold];
-    loaderLabel.textColor = ThemeManager.shared.primaryTextColor;
-    [sidePanel addSubview:loaderLabel];
-
-    _loaderBtn = [UIButton buttonWithType:UIButtonTypeSystem];
-    _loaderBtn.translatesAutoresizingMaskIntoConstraints = NO;
-    [_loaderBtn setTitle:_selectedModloader forState:UIControlStateNormal];
-    [_loaderBtn setTitleColor:ThemeManager.shared.primaryTextColor forState:UIControlStateNormal];
-    _loaderBtn.backgroundColor = ThemeManager.shared.cardBackgroundColor;
-    _loaderBtn.layer.cornerRadius = 6;
-    _loaderBtn.layer.borderWidth = 1;
-    _loaderBtn.layer.borderColor = ThemeManager.shared.separatorColor.CGColor;
-    _loaderBtn.titleLabel.font = [UIFont systemFontOfSize:13];
-    [_loaderBtn addTarget:self action:@selector(pickModloader) forControlEvents:UIControlEventTouchUpInside];
-    [sidePanel addSubview:_loaderBtn];
 
     _downloadBtn = [UIButton buttonWithType:UIButtonTypeSystem];
     _downloadBtn.translatesAutoresizingMaskIntoConstraints = NO;
@@ -436,27 +383,11 @@
         [sidePanel.widthAnchor constraintEqualToConstant:sideWidth],
         [sidePanel.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor],
 
-        [verHeader.topAnchor constraintEqualToAnchor:sidePanel.topAnchor constant:16],
-        [verHeader.centerXAnchor constraintEqualToAnchor:sidePanel.centerXAnchor],
-
-        [_versionTable.topAnchor constraintEqualToAnchor:verHeader.bottomAnchor constant:6],
-        [_versionTable.leadingAnchor constraintEqualToAnchor:sidePanel.leadingAnchor constant:6],
-        [_versionTable.trailingAnchor constraintEqualToAnchor:sidePanel.trailingAnchor constant:-6],
-        [_versionTable.heightAnchor constraintEqualToConstant:MIN(_localVersions.count * 28, 140)],
-
-        [loaderLabel.topAnchor constraintEqualToAnchor:_versionTable.bottomAnchor constant:12],
-        [loaderLabel.centerXAnchor constraintEqualToAnchor:sidePanel.centerXAnchor],
-
-        [_loaderBtn.topAnchor constraintEqualToAnchor:loaderLabel.bottomAnchor constant:6],
-        [_loaderBtn.leadingAnchor constraintEqualToAnchor:sidePanel.leadingAnchor constant:6],
-        [_loaderBtn.trailingAnchor constraintEqualToAnchor:sidePanel.trailingAnchor constant:-6],
-        [_loaderBtn.heightAnchor constraintEqualToConstant:32],
-
-        [_sourceControl.topAnchor constraintEqualToAnchor:_loaderBtn.bottomAnchor constant:8],
+        [_sourceControl.topAnchor constraintEqualToAnchor:sidePanel.topAnchor constant:16],
         [_sourceControl.leadingAnchor constraintEqualToAnchor:sidePanel.leadingAnchor constant:6],
         [_sourceControl.trailingAnchor constraintEqualToAnchor:sidePanel.trailingAnchor constant:-6],
 
-        [_downloadBtn.topAnchor constraintEqualToAnchor:_sourceControl.bottomAnchor constant:12],
+        [_downloadBtn.topAnchor constraintEqualToAnchor:_sourceControl.bottomAnchor constant:20],
         [_downloadBtn.leadingAnchor constraintEqualToAnchor:sidePanel.leadingAnchor constant:6],
         [_downloadBtn.trailingAnchor constraintEqualToAnchor:sidePanel.trailingAnchor constant:-6],
         [_downloadBtn.heightAnchor constraintEqualToConstant:36],
@@ -487,14 +418,27 @@
 - (void)updateColors {
     ThemeManager *theme = ThemeManager.shared;
     self.view.backgroundColor = theme.backgroundColor;
-    _searchBar.searchTextField.textColor = theme.primaryTextColor;
+    if (@available(iOS 13.0, *)) {
+        _searchBar.searchTextField.textColor = theme.primaryTextColor;
+    }
     _searchBar.tintColor = theme.accentColor;
     _emptyLabel.textColor = theme.secondaryTextColor;
     _errorLabel.textColor = theme.errorColor;
-    _loaderBtn.backgroundColor = theme.cardBackgroundColor;
-    _loaderBtn.layer.borderColor = theme.separatorColor.CGColor;
-    [_loaderBtn setTitleColor:theme.primaryTextColor forState:UIControlStateNormal];
     _sourceControl.selectedSegmentTintColor = theme.accentColor;
+}
+
+- (NSString *)selectedVersion {
+    VersionProfile *profile = VersionDirectoryManager.shared.currentProfile;
+    if (profile.mcVersion) return profile.mcVersion;
+    NSString *cv = VersionDirectoryManager.shared.currentVersion;
+    if (cv.length > 0) return [VersionProfile cleanMinecraftVersion:cv];
+    return @"";
+}
+
+- (NSString *)selectedModloader {
+    VersionProfile *profile = VersionDirectoryManager.shared.currentProfile;
+    if (profile.modLoader) return profile.modLoader;
+    return getPrefObject(@"internal.mod_loader") ?: @"Vanilla";
 }
 
 - (void)loadModsWithQuery:(NSString *)query offset:(NSInteger)offset {
@@ -518,6 +462,7 @@
             if (weakSelf.spinner.isAnimating) {
                 [weakSelf.spinner stopAnimating];
                 weakSelf.errorLabel.text = @"Request timed out.\nCheck your internet connection.";
+                [weakSelf.view bringSubviewToFront:weakSelf.errorLabel];
                 weakSelf.errorLabel.hidden = NO;
             }
         }];
@@ -526,12 +471,14 @@
     }
 
     NSString *loaderFilter = nil;
-    if (_selectedModloader && ![_selectedModloader isEqualToString:@"Vanilla"]) {
-        loaderFilter = _selectedModloader.lowercaseString;
+    NSString *selectedLoader = [self selectedModloader];
+    if (selectedLoader && ![selectedLoader isEqualToString:@"Vanilla"]) {
+        loaderFilter = selectedLoader.lowercaseString;
     }
     NSString *gameVersionFilter = nil;
-    if (_selectedVersion.length > 0) {
-        gameVersionFilter = _selectedVersion;
+    NSString *selVer = [self selectedVersion];
+    if (selVer.length > 0) {
+        gameVersionFilter = selVer;
     }
 
     void (^handleResults)(NSArray *, NSError *) = ^(NSArray<NSDictionary *> *results, NSError *error) {
@@ -568,6 +515,7 @@
         } else if (error && offset == 0) {
             self.errorLabel.text = error.localizedDescription ?: @"Failed to load mods.";
             self.errorLabel.hidden = NO;
+            [self.view bringSubviewToFront:self.errorLabel];
         }
     };
 
@@ -579,25 +527,41 @@
 }
 
 - (void)trimModsIfNeeded {
-    if (self.mods.count <= 150) return;
-    NSInteger removeCount = ((self.mods.count - 150) / 50) * 50;
-    if (removeCount <= 0) return;
+    NSInteger maxVisible = 60;
+    if (self.mods.count <= maxVisible) return;
+
+    NSInteger pagesToRemove = (self.mods.count - maxVisible) / self.pageSize;
+    if (pagesToRemove <= 0) return;
+
+    NSInteger removeCount = pagesToRemove * self.pageSize;
     NSRange range = NSMakeRange(0, removeCount);
     [self.mods removeObjectsInRange:range];
+
+    CGFloat offsetY = self.tableView.contentOffset.y;
+    CGFloat estimatedCellHeight = 80;
+    CGFloat adjustedOffset = offsetY - removeCount * estimatedCellHeight;
+    if (adjustedOffset < 0) adjustedOffset = 0;
+
+    NSInteger remainingRemove = removeCount;
     while (self.pageOffsets.count > 0) {
         NSNumber *firstOffset = self.pageOffsets.firstObject;
         NSArray *page = self.pageCache[firstOffset];
         if (!page) {
+            [self.pageCache removeObjectForKey:firstOffset];
             [self.pageOffsets removeObjectAtIndex:0];
             continue;
         }
-        if (page.count <= removeCount) {
-            removeCount -= page.count;
+        if (page.count <= remainingRemove) {
+            remainingRemove -= page.count;
+            [self.pageCache removeObjectForKey:firstOffset];
             [self.pageOffsets removeObjectAtIndex:0];
         } else {
             break;
         }
     }
+
+    self.tableView.contentOffset = CGPointMake(0, adjustedOffset);
+    [self.tableView reloadData];
 }
 
 - (void)loadMoreMods {
@@ -610,12 +574,13 @@
 }
 
 - (void)restorePreviousPage {
-    if (self.pageOffsets.count == 0) return;
+    if (self.pageOffsets.count == 0 || _isRestoringPage) return;
+    _isRestoringPage = YES;
     NSNumber *firstOffset = self.pageOffsets.firstObject;
-    if ([firstOffset integerValue] <= 0) return;
+    if ([firstOffset integerValue] <= 0) { _isRestoringPage = NO; return; }
     NSNumber *prevOffset = @([firstOffset integerValue] - 50);
     NSArray *cachedPage = self.pageCache[prevOffset];
-    if (!cachedPage) return;
+    if (!cachedPage) { _isRestoringPage = NO; return; }
 
     NSIndexSet *indexes = [NSIndexSet indexSetWithIndexesInRange:NSMakeRange(0, cachedPage.count)];
     [self.mods insertObjects:cachedPage atIndexes:indexes];
@@ -625,6 +590,7 @@
     [self.tableView reloadData];
     CGFloat estimatedCellHeight = 80;
     self.tableView.contentOffset = CGPointMake(0, offsetY + cachedPage.count * estimatedCellHeight);
+    _isRestoringPage = NO;
 }
 
 #pragma mark - Scroll (pagination)
@@ -640,7 +606,7 @@
         [self loadMoreMods];
     }
 
-    if (offsetY < 80 && !_isLoadingMore && _pageOffsets.count > 0) {
+    if (offsetY < 80 && !_isLoadingMore && !_isRestoringPage && _pageOffsets.count > 0) {
         NSNumber *firstOffset = _pageOffsets.firstObject;
         if ([firstOffset integerValue] > 0) {
             [self restorePreviousPage];
@@ -673,21 +639,10 @@
 #pragma mark - TableView (main mod list)
 
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
-    if (tableView == _versionTable) return _localVersions.count;
     return _mods.count;
 }
 
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
-    if (tableView == _versionTable) {
-        UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:@"VerCell" forIndexPath:indexPath];
-        cell.backgroundColor = ThemeManager.shared.cardBackgroundColor;
-        cell.textLabel.font = [UIFont systemFontOfSize:12];
-        cell.textLabel.textColor = ThemeManager.shared.primaryTextColor;
-        NSString *ver = _localVersions[indexPath.row];
-        cell.textLabel.text = [@"  " stringByAppendingString:ver];
-        cell.accessoryType = [ver isEqualToString:_selectedVersion] ? UITableViewCellAccessoryCheckmark : UITableViewCellAccessoryNone;
-        return cell;
-    }
     ModCell *cell = [tableView dequeueReusableCellWithIdentifier:@"ModCell" forIndexPath:indexPath];
     [cell configureWithDict:_mods[indexPath.row]];
     return cell;
@@ -695,21 +650,6 @@
 
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
     [tableView deselectRowAtIndexPath:indexPath animated:YES];
-    if (tableView == _versionTable) {
-        _selectedVersion = _localVersions[indexPath.row];
-        VersionDirectoryManager.shared.currentVersion = _selectedVersion;
-        NSString *verLower = _selectedVersion.lowercaseString;
-        if ([verLower containsString:@"fabric"]) _selectedModloader = @"Fabric";
-        else if ([verLower containsString:@"forge"]) _selectedModloader = @"Forge";
-        else if ([verLower containsString:@"quilt"]) _selectedModloader = @"Quilt";
-        else if ([verLower containsString:@"neoforge"]) _selectedModloader = @"NeoForge";
-        else _selectedModloader = @"Vanilla";
-        [_loaderBtn setTitle:_selectedModloader forState:UIControlStateNormal];
-        setPrefObject(@"internal.mod_loader", _selectedModloader);
-        [_versionTable reloadData];
-        [[NSNotificationCenter defaultCenter] postNotificationName:@"VersionDidChangeNotification" object:nil userInfo:@{@"version": _selectedVersion}];
-        return;
-    }
     [HapticManager.shared play:HapticTypeLight];
     ModDetailViewController *detail = [[ModDetailViewController alloc] initWithMod:_mods[indexPath.row]];
     detail.coordinator = self.coordinator;
@@ -717,23 +657,6 @@
 }
 
 #pragma mark - Side panel actions
-
-- (void)pickModloader {
-    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"Mod Loader" message:nil preferredStyle:UIAlertControllerStyleActionSheet];
-    NSArray *loaders = @[@"Vanilla", @"Fabric", @"Forge", @"Quilt", @"NeoForge"];
-    for (NSString *loader in loaders) {
-        BOOL isSelected = [loader isEqualToString:_selectedModloader];
-        NSString *label = isSelected ? [NSString stringWithFormat:@"✓ %@", loader] : loader;
-        [sheet addAction:[UIAlertAction actionWithTitle:label style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
-            _selectedModloader = loader;
-            [_loaderBtn setTitle:loader forState:UIControlStateNormal];
-            setPrefObject(@"internal.mod_loader", loader);
-            [self loadModsWithQuery:_searchBar.text ?: @"" offset:0];
-        }]];
-    }
-    [sheet addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
-    [self presentViewController:sheet animated:YES completion:nil];
-}
 
 - (void)downloadCurrentMod {
     if (!_selectedMod) {
@@ -743,6 +666,7 @@
 
     DownloadProgressOverlay *overlay = [DownloadProgressOverlay showInView:self.view title:@"Downloading Mod"];
     [overlay updateProgress:0 message:@"Loading versions..."];
+    __weak typeof(self) weakSelf = self;
 
     NSString *projectId = _selectedMod[@"project_id"];
     [ModrinthService.shared loadProjectVersions:projectId completion:^(NSArray<NSDictionary *> *versions, NSError *error) {
@@ -752,14 +676,21 @@
             return;
         }
 
-        NSDictionary *best = [self bestVersionForSelected:versions];
+        NSDictionary *best = [weakSelf bestVersionForSelected:versions];
         if (!best) best = versions.firstObject;
 
         NSString *url = best[@"url"];
         NSString *filename = best[@"filename"] ?: @"mod.jar";
-        [ModrinthService.shared downloadFile:url name:filename progressBlock:^(float p) {
+
+        [overlay setCancelBlock:^{
+            [weakSelf.currentDownloadTask cancel];
+            weakSelf.currentDownloadTask = nil;
+        }];
+
+        weakSelf.currentDownloadTask = [ModrinthService.shared downloadFile:url name:filename progressBlock:^(float p) {
             [overlay updateProgress:p message:[NSString stringWithFormat:@"Downloading %@", filename]];
         } completion:^(NSString *path, NSError *dlError) {
+            weakSelf.currentDownloadTask = nil;
             if (path) {
                 [overlay finishWithMessage:@"Downloaded!"];
                 dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 1.5 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
@@ -767,8 +698,12 @@
                     showDialog(@"Downloaded", [NSString stringWithFormat:@"%@ saved to temp.", filename]);
                 });
             } else {
-                [overlay dismiss];
-                showDialog(@"Download Failed", dlError.localizedDescription ?: @"Unknown error");
+                if ([dlError.domain isEqualToString:NSURLErrorDomain] && dlError.code == NSURLErrorCancelled) {
+                    [overlay dismiss];
+                } else {
+                    [overlay dismiss];
+                    showDialog(@"Download Failed", dlError.localizedDescription ?: @"Unknown error");
+                }
             }
         }];
     }];
@@ -782,6 +717,7 @@
 
     DownloadProgressOverlay *overlay = [DownloadProgressOverlay showInView:self.view title:@"Installing Mod"];
     [overlay updateProgress:0 message:@"Loading versions..."];
+    __weak typeof(self) weakSelf = self;
 
     NSString *projectId = _selectedMod[@"project_id"];
     [ModrinthService.shared loadProjectVersions:projectId completion:^(NSArray<NSDictionary *> *versions, NSError *error) {
@@ -791,31 +727,57 @@
             return;
         }
 
-        NSDictionary *best = [self bestVersionForSelected:versions];
+        NSDictionary *best = [weakSelf bestVersionForSelected:versions];
         if (!best) best = versions.firstObject;
 
         NSString *url = best[@"url"];
         NSString *filename = best[@"filename"] ?: @"mod.jar";
-        NSString *targetVersion = VersionDirectoryManager.shared.currentVersion ?: self.selectedVersion;
-        [overlay updateProgress:0 message:@"Downloading..."];
-        [DownloadManager.shared downloadMod:url name:filename version:targetVersion completion:^(BOOL success, NSError *installError) {
-            if (success) {
-                [overlay finishWithMessage:@"Installed!"];
-                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 1.5 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+        NSString *targetVersion = VersionDirectoryManager.shared.currentVersion ?: [weakSelf selectedVersion];
+
+        [overlay setCancelBlock:^{
+            [weakSelf.currentDownloadTask cancel];
+            weakSelf.currentDownloadTask = nil;
+        }];
+
+        weakSelf.currentDownloadTask = [ModrinthService.shared downloadFile:url name:filename progressBlock:^(float p) {
+            [overlay updateProgress:p message:@"Downloading..."];
+        } completion:^(NSString *path, NSError *dlError) {
+            weakSelf.currentDownloadTask = nil;
+            if (path) {
+                [overlay updateProgress:1.0 message:@"Copying to profile..."];
+                NSString *modsDir = [VersionDirectoryManager.shared modsPathForVersion:targetVersion];
+                NSString *targetPath = [modsDir stringByAppendingPathComponent:filename];
+                if (![targetPath hasSuffix:@".jar"]) targetPath = [targetPath stringByAppendingPathExtension:@"jar"];
+                [[NSFileManager defaultManager] createDirectoryAtPath:modsDir withIntermediateDirectories:YES attributes:nil error:nil];
+                [[NSFileManager defaultManager] removeItemAtPath:targetPath error:nil];
+                NSError *moveError = nil;
+                [[NSFileManager defaultManager] moveItemAtPath:path toPath:targetPath error:&moveError];
+                BOOL success = moveError == nil;
+                if (success) {
+                    [overlay finishWithMessage:@"Installed!"];
+                    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 1.5 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+                        [overlay dismiss];
+                        showDialog(@"Installed", [NSString stringWithFormat:@"%@ installed.", _selectedMod[@"title"]]);
+                    });
+                } else {
                     [overlay dismiss];
-                    showDialog(@"Installed", [NSString stringWithFormat:@"%@ installed.", _selectedMod[@"title"]]);
-                });
+                    showDialog(@"Install Failed", moveError.localizedDescription ?: @"Unknown error");
+                }
             } else {
-                [overlay dismiss];
-                showDialog(@"Install Failed", installError.localizedDescription ?: @"Unknown error");
+                if ([dlError.domain isEqualToString:NSURLErrorDomain] && dlError.code == NSURLErrorCancelled) {
+                    [overlay dismiss];
+                } else {
+                    [overlay dismiss];
+                    showDialog(@"Download Failed", dlError.localizedDescription ?: @"Unknown error");
+                }
             }
         }];
     }];
 }
 
 - (NSDictionary *)bestVersionForSelected:(NSArray<NSDictionary *> *)versions {
-    NSString *targetVersion = _selectedVersion;
-    NSString *targetLoader = [_selectedModloader lowercaseString];
+    NSString *targetVersion = [self selectedVersion];
+    NSString *targetLoader = [[self selectedModloader] lowercaseString];
     for (NSDictionary *ver in versions) {
         NSArray *gameVersions = ver[@"game_versions"];
         NSArray *loaders = ver[@"loaders"];
@@ -829,32 +791,13 @@
     return nil;
 }
 
-- (void)versionDidChange:(NSNotification *)note {
-    NSString *version = note.userInfo[@"version"];
-    if (version.length > 0 && ![version isEqualToString:_selectedVersion]) {
-        NSString *versionsDir = VersionDirectoryManager.shared.versionsRootPath;
-        NSArray *contents = [[NSFileManager defaultManager] contentsOfDirectoryAtPath:versionsDir error:nil];
-        NSMutableArray *vers = [NSMutableArray array];
-        for (NSString *item in contents) {
-            NSString *fullPath = [versionsDir stringByAppendingPathComponent:item];
-            BOOL isDir = NO;
-            if ([[NSFileManager defaultManager] fileExistsAtPath:fullPath isDirectory:&isDir] && isDir) {
-                [vers addObject:item];
-            }
-        }
-        _localVersions = [vers sortedArrayUsingSelector:@selector(localizedStandardCompare:)];
-        VersionProfile *profile = [VersionProfile profileWithVersionId:version];
-        _selectedVersion = profile.mcVersion ?: version;
-        if (profile.modLoader) {
-            _selectedModloader = profile.modLoader;
-            [_loaderBtn setTitle:_selectedModloader forState:UIControlStateNormal];
-        }
-        [_versionTable reloadData];
-    }
+- (void)versionDidChangeExternal {
+    [self loadModsWithQuery:@"" offset:0];
 }
 
 - (void)dealloc {
     [_timeoutTimer invalidate];
+    [_currentDownloadTask cancel];
     [[NSNotificationCenter defaultCenter] removeObserver:self];
 }
 

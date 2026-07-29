@@ -847,7 +847,11 @@ public class GLFW
     @NativeType("GLFWwindow *")
     public static long glfwGetCurrentContext() {
         long __functionAddress = Functions.GetCurrentContext;
-        return invokeP(__functionAddress);
+        long ctx = invokeP(__functionAddress);
+        if (ctx == 0L && mainContext != 0L) {
+            ctx = mainContext;
+        }
+        return ctx;
     }
 
     public static void nglfwGetFramebufferSize(@NativeType("GLFWwindow *") long window, @Nullable @NativeType("int *") long width, @Nullable @NativeType("int *") long height) {

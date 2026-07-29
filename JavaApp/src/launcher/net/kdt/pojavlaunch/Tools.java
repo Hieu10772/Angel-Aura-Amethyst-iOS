@@ -11,9 +11,8 @@ import java.io.FileFilter;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
-import java.io.FileWriter;
-import java.io.InputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.PrintWriter;
@@ -24,12 +23,16 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.nio.charset.Charset;
+import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.jar.JarFile;
+import java.util.zip.ZipEntry;
 import net.kdt.pojavlaunch.uikit.UIKit;
 import net.kdt.pojavlaunch.utils.JSONUtils;
 import net.kdt.pojavlaunch.value.DependentLibrary;
@@ -373,6 +376,26 @@ createLibraryInfo(libItem);
                 libItem.downloads.artifact.path = "org/ow2/asm/asm-all/5.0.4/asm-all-5.0.4.jar";
                 libItem.downloads.artifact.sha1 = "e6244859997b3d4237a552669279780876228909";
                 libItem.downloads.artifact.url = "https://repo1.maven.org/maven2/org/ow2/asm/asm-all/5.0.4/asm-all-5.0.4.jar";
+            } else if (libItem.name.startsWith("org.ow2.asm:asm:") ||
+                       libItem.name.startsWith("org.ow2.asm:asm-analysis:") ||
+                       libItem.name.startsWith("org.ow2.asm:asm-commons:") ||
+                       libItem.name.startsWith("org.ow2.asm:asm-tree:") ||
+                       libItem.name.startsWith("org.ow2.asm:asm-util:")) {
+                // Replace ASM < 9.7.1 with 9.7.1 for Java 25 class file support (major version 69)
+                if (version.length >= 2) {
+                    int major = Integer.parseInt(version[0]);
+                    int minor = Integer.parseInt(version[1]);
+                    int patch = version.length > 2 ? Integer.parseInt(version[2]) : 0;
+                    if (major > 9 || (major == 9 && minor > 7) || (major == 9 && minor == 7 && patch >= 1)) {
+                        continue;
+                    }
+                }
+                String asmArtifact = libParts[1];
+                createLibraryInfo(libItem);
+                libItem.name = "org.ow2.asm:" + asmArtifact + ":9.7.1";
+                libItem.url = "https://repo1.maven.org/maven2/";
+                libItem.downloads.artifact.path = "org/ow2/asm/" + asmArtifact + "/9.7.1/" + asmArtifact + "-9.7.1.jar";
+                libItem.downloads.artifact.url = "https://repo1.maven.org/maven2/org/ow2/asm/" + asmArtifact + "/9.7.1/" + asmArtifact + "-9.7.1.jar";
             }
         }
     }
@@ -588,5 +611,159 @@ createLibraryInfo(libItem);
 
     public static void write(String path, String content) throws IOException {
         write(path, content.getBytes());
+    }
+
+    // ==================== Distant Horizons Fix ====================
+    // On iOS, DH mod extracts libzstd-jni_dh-1.5.7-6.dylib to a temp directory,
+    // but the relocation process invalidates the code signature, causing crash.
+    // Fix: Pre-extract the library, sign it with ad-hoc signature, and add to java.library.path
+
+    private static final String DH_MOD_ID = "distanthorizons";
+    private static final String ZSTD_LIB_NAME = "libzstd-jni_dh-1.5.7-6.dylib";
+    private static final String ZSTD_LIB_NAME_ALT = "libzstd-jni_dh.dylib"; // fallback
+
+    /**
+     * Detect if Distant Horizons mod is in the library list.
+     */
+    public static boolean hasDistantHorizonsMod(DependentLibrary[] libraries) {
+        if (libraries == null) return false;
+        for (DependentLibrary lib : libraries) {
+            if (lib.name != null && lib.name.toLowerCase().contains(DH_MOD_ID)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Extract and sign zstd-jni native library for Distant Horizons.
+     * Returns the directory containing the signed library, or null if failed.
+     */
+    public static String prepareDistantHorizonsNativeLib(JMinecraftVersionList.Version versionInfo) {
+        if (!hasDistantHorizonsMod(versionInfo.libraries)) {
+            return null;
+        }
+
+        System.out.println("[DH Fix] Distant Horizons detected, preparing native library...");
+
+        // Find DH jar in libraries
+        String dhJarPath = findDhJarPath(versionInfo);
+        if (dhJarPath == null) {
+            System.err.println("[DH Fix] Could not find Distant Horizons jar");
+            return null;
+        }
+
+        // Extract library to app's Documents directory (persistent, signable)
+        File extractDir = new File(DIR_APP_DATA, "dh_natives");
+        if (!extractDir.exists()) {
+            extractDir.mkdirs();
+        }
+
+        File targetLib = new File(extractDir, ZSTD_LIB_NAME);
+        if (targetLib.exists()) {
+            System.out.println("[DH Fix] Library already exists at: " + targetLib.getAbsolutePath());
+        } else {
+            if (!extractNativeLibFromJar(dhJarPath, targetLib)) {
+                System.err.println("[DH Fix] Failed to extract native library from DH jar");
+                return null;
+            }
+        }
+
+        // Sign the library with ad-hoc signature (required for iOS)
+        if (!signLibrary(targetLib)) {
+            System.err.println("[DH Fix] Failed to sign library");
+            return null;
+        }
+
+        System.out.println("[DH Fix] Successfully prepared DH native library at: " + extractDir.getAbsolutePath());
+        return extractDir.getAbsolutePath();
+    }
+
+    private static String findDhJarPath(JMinecraftVersionList.Version versionInfo) {
+        if (versionInfo.libraries == null) return null;
+        for (DependentLibrary lib : versionInfo.libraries) {
+            if (lib.name != null && lib.name.toLowerCase().contains(DH_MOD_ID)) {
+                String artifactPath = artifactToPath(lib);
+                File jarFile = new File(DIR_HOME_LIBRARY, artifactPath);
+                if (jarFile.exists()) {
+                    return jarFile.getAbsolutePath();
+                }
+            }
+        }
+        return null;
+    }
+
+    private static boolean extractNativeLibFromJar(String jarPath, File targetLib) {
+        try (JarFile jar = new JarFile(jarPath)) {
+            // Try primary name first
+            ZipEntry entry = jar.getEntry(ZSTD_LIB_NAME);
+            if (entry == null) {
+                // Try alternative name (maybe in different path)
+                entry = findLibEntry(jar, ZSTD_LIB_NAME_ALT);
+            }
+            if (entry == null) {
+                // Search for any zstd-jni library
+                entry = findLibEntry(jar, "zstd-jni");
+            }
+            if (entry == null) {
+                System.err.println("[DH Fix] No zstd-jni library found in DH jar");
+                return false;
+            }
+
+            System.out.println("[DH Fix] Extracting " + entry.getName() + " from DH jar");
+            try (InputStream is = jar.getInputStream(entry);
+                 FileOutputStream fos = new FileOutputStream(targetLib)) {
+                byte[] buffer = new byte[8192];
+                int len;
+                while ((len = is.read(buffer)) > 0) {
+                    fos.write(buffer, 0, len);
+                }
+            }
+            return true;
+        } catch (IOException e) {
+            System.err.println("[DH Fix] Error extracting library: " + e.getMessage());
+            e.printStackTrace();
+            return false;
+        }
+    }
+
+    private static ZipEntry findLibEntry(JarFile jar, String keyword) {
+        for (java.util.Enumeration<java.util.jar.JarEntry> e = jar.entries(); e.hasMoreElements(); ) {
+            java.util.jar.JarEntry entry = e.nextElement();
+            String name = entry.getName().toLowerCase();
+            if (name.contains(keyword.toLowerCase()) && name.endsWith(".dylib")) {
+                return entry;
+            }
+        }
+        return null;
+    }
+
+    private static boolean signLibrary(File libFile) {
+        try {
+            // Use codesign with ad-hoc signature (no certificate needed)
+            ProcessBuilder pb = new ProcessBuilder("codesign", "--force", "--sign", "-", libFile.getAbsolutePath());
+            pb.redirectErrorStream(true);
+            Process process = pb.start();
+            int exitCode = process.waitFor();
+            if (exitCode == 0) {
+                System.out.println("[DH Fix] Successfully signed library: " + libFile.getName());
+                return true;
+            } else {
+                StringBuilder output = new StringBuilder();
+                try (InputStream is = process.getInputStream()) {
+                    byte[] buffer = new byte[1024];
+                    int len;
+                    while ((len = is.read(buffer)) > 0) {
+                        output.append(new String(buffer, 0, len));
+                    }
+                }
+                System.err.println("[DH Fix] codesign failed (exit " + exitCode + "): " + output);
+                return false;
+            }
+        } catch (Exception e) {
+            System.err.println("[DH Fix] Error signing library: " + e.getMessage());
+            e.printStackTrace();
+            return false;
+        }
     }
 }

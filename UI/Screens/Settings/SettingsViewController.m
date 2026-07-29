@@ -67,10 +67,10 @@
             @{@"type": @"switch", @"label": localize(@"preference.title.allow_microphone", nil), @"key": @"video.allow_microphone"},
             @{@"type": @"picker", @"label": localize(@"preference.title.microphone_source", nil), @"key": @"video.microphone_source", @"options": @[@"auto", @"front", @"bottom", @"back"], @"default": @"auto"},
             @{@"type": @"switch", @"label": localize(@"preference.title.silence_other_audio", nil), @"key": @"video.silence_other_audio"},
-            @{@"type": @"switch", @"label": localize(@"preference.title.silence_with_switch", nil), @"key": @"video.silence_with_switch"},
         ]},
         @{@"title": localize(@"Gamepad", nil), @"items": @[
             @{@"type": @"picker", @"label": localize(@"preference.title.default_gamepad_ctrl", nil), @"key": @"control.controller_type", @"options": @[@"none", @"mfi", @"ps4", @"ps5", @"xbox"], @"default": @"none"},
+            @{@"type": @"slider", @"label": localize(@"preference.title.gamepad_sensitivity", nil), @"key": @"control.gamepad_sensitivity", @"min": @10, @"max": @300, @"suffix": @"%"},
             @{@"type": @"switch", @"label": localize(@"preference.title.hardware_hide", nil), @"key": @"control.hardware_hide"},
             @{@"type": @"navigate", @"label": localize(@"Gamepad Layout", nil), @"vc": @"LauncherPrefContCfgViewController"},
         ]},
@@ -83,6 +83,7 @@
             @{@"type": @"switch", @"label": localize(@"preference.title.auto_ram", nil), @"key": @"java.auto_ram"},
             @{@"type": @"switch", @"label": localize(@"preference.title.check_sha", nil), @"key": @"general.check_sha"},
             @{@"type": @"switch", @"label": localize(@"preference.title.cosmetica", nil), @"key": @"general.cosmetica"},
+            @{@"type": @"switch", @"label": @"Lock Landscape", @"key": @"general.lock_landscape"},
             @{@"type": @"picker", @"label": localize(@"Theme", nil), @"key": @"launcher.theme", @"options": @[@"System", @"Dark", @"Light"], @"default": @"System"},
             @{@"type": @"text", @"label": localize(@"CurseForge API Key", nil), @"key": @"curseforge.api_key", @"placeholder": localize(@"Paste your CurseForge API key here", nil)},
             @{@"type": @"switch", @"label": localize(@"preference.title.debug_logging", nil), @"key": @"general.debug_logging"},
@@ -512,6 +513,8 @@
         [self.tableView reloadData];
     } else if ([item[@"key"] isEqualToString:@"general.liquid_glass"]) {
         [[NSNotificationCenter defaultCenter] postNotificationName:@"LiquidGlassDidChangeNotification" object:nil];
+    } else if ([item[@"key"] isEqualToString:@"general.lock_landscape"]) {
+        [UIViewController attemptRotationToDeviceOrientation];
     }
 }
 
@@ -527,6 +530,9 @@
         ThemeManager.shared.uiOpacity = val / 100.0;
     } else {
         setPrefFloat(item[@"key"], val);
+        if ([item[@"key"] isEqualToString:@"video.resolution"]) {
+            [[NSNotificationCenter defaultCenter] postNotificationName:@"ResolutionDidChangeNotification" object:nil];
+        }
     }
     UILabel *valLabel = (UILabel *)[cell.contentView viewWithTag:101];
     valLabel.text = [NSString stringWithFormat:@"%.0f%@", val, item[@"suffix"] ?: @""];
@@ -547,6 +553,10 @@
 
 - (void)showPickerForItem:(NSDictionary *)item {
     NSArray *options = item[@"options"];
+    if (![options isKindOfClass:[NSArray class]] || options.count == 0) {
+        showDialog(@"No Options", @"No options available for this setting.");
+        return;
+    }
     id currentValueObj = getPrefObject(item[@"key"]) ?: item[@"default"];
     NSString *currentValue = [currentValueObj isKindOfClass:[NSString class]] ? currentValueObj : [currentValueObj description];
 
@@ -565,11 +575,10 @@
         }
     } else {
         for (NSString *opt in options) {
+            if (![opt isKindOfClass:[NSString class]]) continue;
             NSString *display = opt;
-            if ([opt isKindOfClass:[NSString class]]) {
-                NSString *cap = [opt stringByReplacingCharactersInRange:NSMakeRange(0,1) withString:[[opt substringToIndex:1] capitalizedString]];
-                display = cap;
-            }
+            NSString *cap = [opt stringByReplacingCharactersInRange:NSMakeRange(0,1) withString:[[opt substringToIndex:1] capitalizedString]];
+            display = cap;
             BOOL isSelected = [currentValue isEqualToString:opt];
             NSString *label = isSelected ? [NSString stringWithFormat:@"✓ %@", display] : display;
             [sheet addAction:[UIAlertAction actionWithTitle:label style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
@@ -582,6 +591,12 @@
         }
     }
     [sheet addAction:[UIAlertAction actionWithTitle:localize(@"Cancel", nil) style:UIAlertActionStyleCancel handler:nil]];
+
+    if (UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPad) {
+        sheet.popoverPresentationController.sourceView = self.tableView;
+        sheet.popoverPresentationController.sourceRect = CGRectMake(CGRectGetMidX(self.tableView.bounds), CGRectGetMidY(self.tableView.bounds), 0, 0);
+    }
+
     [self presentViewController:sheet animated:YES completion:nil];
 }
 

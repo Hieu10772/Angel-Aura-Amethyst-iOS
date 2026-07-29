@@ -25,11 +25,20 @@
         return stripped;
     }
 
+    if ([rawVersion hasPrefix:@"forge-"]) {
+        NSString *stripped = [rawVersion substringFromIndex:@"forge-".length];
+        NSRange hyphen = [stripped rangeOfString:@"-"];
+        if (hyphen.location != NSNotFound) {
+            return [stripped substringToIndex:hyphen.location];
+        }
+        return stripped;
+    }
+
     if ([rawVersion hasPrefix:@"neoforge-"]) {
         NSString *stripped = [rawVersion substringFromIndex:@"neoforge-".length];
-        NSArray *parts = [stripped componentsSeparatedByString:@"."];
-        if (parts.count >= 2) {
-            return [NSString stringWithFormat:@"%@.%@", parts[0], parts[1]];
+        NSRange hyphen = [stripped rangeOfString:@"-"];
+        if (hyphen.location != NSNotFound) {
+            return [stripped substringToIndex:hyphen.location];
         }
         return stripped;
     }
@@ -58,6 +67,13 @@
         profile.mcVersion = [self cleanMinecraftVersion:json[@"id"]];
     } else {
         profile.mcVersion = [self cleanMinecraftVersion:versionId];
+    }
+
+    if (!profile.mcVersion || [profile.mcVersion hasPrefix:@"forge-"] || [profile.mcVersion hasPrefix:@"neoforge-"]) {
+        NSString *jsonMcVer = json[@"minecraftVersion"];
+        if (jsonMcVer) {
+            profile.mcVersion = jsonMcVer;
+        }
     }
 
     if ([versionId.lowercaseString containsString:@"neoforge"]) {

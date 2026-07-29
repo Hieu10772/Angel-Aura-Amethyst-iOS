@@ -235,9 +235,9 @@
         UIMenuItem *actionDelete = [[UIMenuItem alloc] initWithTitle:localize(@"Remove", nil) action:@selector(actionMenuBtnDelete)];
         if ([sender.view isKindOfClass:[ControlDrawer class]]) {
             UIMenuItem *actionAddSubButton = [[UIMenuItem alloc] initWithTitle:localize(@"custom_controls.button_menu.add_subbutton", nil) action:@selector(actionMenuAddSubButton)];
-            [menuController setMenuItems:@[actionEdit, /* actionCopy, */ actionDelete, actionAddSubButton]];
+            [menuController setMenuItems:@[actionEdit, actionCopy, actionDelete, actionAddSubButton]];
         } else {
-            [menuController setMenuItems:@[actionEdit, /* actionCopy, */ actionDelete]];
+            [menuController setMenuItems:@[actionEdit, actionCopy, actionDelete]];
         }
         self.selectedPoint = sender.view.bounds;
     }
@@ -443,7 +443,8 @@
 }
 
 - (void)actionMenuBtnCopy {
-    // copy
+    ControlButton *sourceButton = (ControlButton *)self.currentGesture.view;
+    [self doCopyButton:sourceButton];
 }
 
 - (void)actionMenuBtnDelete {

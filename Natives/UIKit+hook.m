@@ -3,6 +3,7 @@
 #import "LauncherPreferences.h"
 #import "UIKit+hook.h"
 #import "utils.h"
+#import "SurfaceViewController.h"
 
 __weak UIWindow *mainWindow, *externalWindow;
 
@@ -189,8 +190,8 @@ void init_hookUIKitConstructor(void) {
         }
         current = current.presentedViewController;
     }
-    if ([current isKindOfClass:UINavigationController.class]) {
-        return [(UINavigationController *)self.rootViewController visibleViewController];
+    if ([current isKindOfClass:UINavigationController.class] && [current respondsToSelector:@selector(visibleViewController)]) {
+        return [(UINavigationController *)current visibleViewController];
     } else {
         return current;
     }
@@ -211,7 +212,21 @@ void init_hookUIKitConstructor(void) {
 @implementation UIPointerInteraction(hook)
 - (void)hook__updateInteractionIsEnabled {
     UIView *view = self.view;
-    BOOL enabled = self.enabled; // && view.traitCollection.userInterfaceIdiom == UIUserInterfaceIdiomPad
+    
+    // Determine if we're in menu state or in-game state
+    // Game state: SurfaceViewController is visible (contains the Minecraft game view)
+    // Menu state: Other UI views are visible (preferences, navigation, etc.)
+    UIViewController* visibleVC = currentVC();
+    BOOL enabled = NO;
+    
+    if ([visibleVC isKindOfClass:[SurfaceViewController class]]) {
+        // In game state: keep pointer interaction for game controls
+        enabled = view != nil;
+    } else {
+        // In menu state: disable pointer interaction for menu UI
+        enabled = NO;
+    }
+    
     if([self respondsToSelector:@selector(drivers)]) {
         for(id<_UIPointerInteractionDriver> driver in self.drivers) {
             driver.view = enabled ? view : nil;
@@ -219,12 +234,13 @@ void init_hookUIKitConstructor(void) {
     } else {
         self.driver.view = enabled ? view : nil;
     }
+    
     // to keep it fast, ivar offset is cached for later direct access
     static ptrdiff_t ivarOff = 0;
     if(!ivarOff) {
         ivarOff = ivar_getOffset(class_getInstanceVariable(self.class, "_observingPresentationNotification"));
     }
-
+    
     BOOL *observingPresentationNotification = (BOOL *)((uint64_t)(__bridge void *)self + ivarOff);
     if(!enabled && *observingPresentationNotification) {
         [NSNotificationCenter.defaultCenter removeObserver:self name:UIPresentationControllerPresentationTransitionWillBeginNotification object:nil];
@@ -234,5 +250,15 @@ void init_hookUIKitConstructor(void) {
 @end
 
 UIViewController* currentVC() {
-    return UIWindow.mainWindow.visibleViewController;
+    // Check if visible view controller is SurfaceViewController (game state)
+    UIWindow *mainWindow = UIWindow.mainWindow;
+    UIViewController *visibleVC = mainWindow.visibleViewController;
+    
+    if ([visibleVC isKindOfClass:[SurfaceViewController class]]) {
+        // Game state - keep pointer interaction for game
+        return visibleVC;
+    }
+    
+    // Menu state - pointer interaction should be disabled
+    return visibleVC;
 }

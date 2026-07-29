@@ -116,6 +116,14 @@ jobs:
           branch: buildjre17-21
           name: jre21-ios-aarch64
 
+      - name: Download JRE25
+        run: |
+          mkdir -p depends/java-25-openjdk
+          curl -L --fail -o depends/jre25-ios-aarch64.zip \
+            https://assets.angelauramc.dev/openjdk/ios-arm64/jre25-ios-aarch64.zip
+          cd depends && unzip -o jre25-ios-aarch64.zip && rm -f jre25-ios-aarch64.zip
+          cd depends && tar xf jre25-ios-arm64-*.tar.xz -C java-25-openjdk
+
       - name: Build for ${{ matrix.platform_name }}
         env:
           password: ${{ secrets.ELLIE_MINI_SECRET }}

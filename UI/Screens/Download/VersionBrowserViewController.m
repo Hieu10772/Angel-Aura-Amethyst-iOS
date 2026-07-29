@@ -18,6 +18,7 @@
 @property (nonatomic) NSString *selectedLoader;
 @property (nonatomic) NSArray *loaderVersions;
 @property (nonatomic) NSString *selectedMCVersion;
+@property (nonatomic) NSUInteger fetchSequenceID;
 @end
 
 static NSArray *kLoaders;
@@ -178,12 +179,17 @@ static NSArray *kLoaders;
         }]];
     }
     [sheet addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
+
+    sheet.popoverPresentationController.sourceView = _loaderButton;
+    sheet.popoverPresentationController.sourceRect = _loaderButton.bounds;
+
     [self presentViewController:sheet animated:YES completion:nil];
 }
 
 #pragma mark - Fetch loader versions for a MC version
 
 - (void)fetchLoaderVersionsForMCVersion:(NSString *)mcVersion {
+    NSUInteger currentSequence = ++self.fetchSequenceID;
     [_spinner startAnimating];
     _selectedMCVersion = mcVersion;
     _statusLabel.text = [NSString stringWithFormat:@"Fetching %@ versions for %@...", _selectedLoader, mcVersion];
@@ -198,7 +204,6 @@ static NSArray *kLoaders;
     } else if ([_selectedLoader isEqualToString:@"Forge"]) {
         apiURL = [NSString stringWithFormat:@"https://bmclapi2.bangbang93.com/forge/minecraft/%@", mcVersion];
     } else if ([_selectedLoader isEqualToString:@"NeoForge"]) {
-        // NeoForge official Maven API
         apiURL = @"https://maven.neoforged.net/api/maven/versions/releases/net/neoforged/neoforge";
     }
 
@@ -210,6 +215,7 @@ static NSArray *kLoaders;
 
     [[NSURLSession.sharedSession dataTaskWithURL:[NSURL URLWithString:apiURL] completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
         dispatch_async(dispatch_get_main_queue(), ^{
+            if (currentSequence != self.fetchSequenceID) return;
             [self.spinner stopAnimating];
             if (error || !data) {
                 self.statusLabel.text = [NSString stringWithFormat:@"Error fetching %@ versions: %@", self.selectedLoader, error.localizedDescription ?: @"No data"];
@@ -256,20 +262,20 @@ static NSArray *kLoaders;
                             NSString *ver = entry[@"version"] ?: @"";
                             if (ver.length == 0) continue;
                             [loaderVersions addObject:@{
-                                @"name": [NSString stringWithFormat:@"forge-%@", ver],
+                                @"name": [NSString stringWithFormat:@"forge-%@-%@", mcVersion, ver],
                                 @"version": ver,
                                 @"mc_version": mcVersion,
                                 @"stable": @YES,
-                                @"download_url": [NSString stringWithFormat:@"https://bmclapi2.bangbang93.com/forge/download/%@", mcVersion]
+                                @"download_url": [NSString stringWithFormat:@"https://bmclapi2.bangbang93.com/forge/download/%@/%@", mcVersion, ver]
                             }];
                         } else if ([entryObj isKindOfClass:[NSString class]]) {
                             NSString *ver = (NSString *)entryObj;
                             [loaderVersions addObject:@{
-                                @"name": [NSString stringWithFormat:@"forge-%@", ver],
+                                @"name": [NSString stringWithFormat:@"forge-%@-%@", mcVersion, ver],
                                 @"version": ver,
                                 @"mc_version": mcVersion,
                                 @"stable": @YES,
-                                @"download_url": [NSString stringWithFormat:@"https://bmclapi2.bangbang93.com/forge/download/%@", mcVersion]
+                                @"download_url": [NSString stringWithFormat:@"https://bmclapi2.bangbang93.com/forge/download/%@/%@", mcVersion, ver]
                             }];
                         }
                     }
@@ -299,7 +305,7 @@ static NSArray *kLoaders;
                         if (neoPrefix.length > 0 && ![ver hasPrefix:neoPrefix]) continue;
                         NSString *downloadURL = [NSString stringWithFormat:@"https://maven.neoforged.net/releases/net/neoforged/neoforge/%@/neoforge-%@-installer.jar", ver, ver];
                         [loaderVersions addObject:@{
-                            @"name": [NSString stringWithFormat:@"neoforge-%@", ver],
+                            @"name": [NSString stringWithFormat:@"neoforge-%@-%@", mcVersion, ver],
                             @"version": ver,
                             @"mc_version": mcVersion,
                             @"stable": @YES,
@@ -350,13 +356,23 @@ static NSArray *kLoaders;
                     if (!uzError && profileData) {
                         NSDictionary *profileJson = [NSJSONSerialization JSONObjectWithData:profileData options:0 error:nil];
                         if ([profileJson isKindOfClass:[NSDictionary class]]) {
-                            // Forge/NeoForge install_profile.json has versionInfo key
+                            // Forge/NeoForge install_profile.json
+                            // Legacy (<=1.12.2): versionInfo dictionary
                             NSDictionary *versionInfo = profileJson[@"versionInfo"];
                             if ([versionInfo isKindOfClass:[NSDictionary class]]) {
                                 NSError *writeError;
                                 versionData = [NSJSONSerialization dataWithJSONObject:versionInfo options:0 error:&writeError];
+                            } else if ([profileJson[@"json"] isKindOfClass:[NSString class]]) {
+                                // Modern Forge/NeoForge (1.13+): json string field
+                                versionData = [profileJson[@"json"] dataUsingEncoding:NSUTF8StringEncoding];
+                            } else if ([profileJson[@"json"] isKindOfClass:[NSDictionary class]]) {
+                                versionData = [NSJSONSerialization dataWithJSONObject:profileJson[@"json"] options:0 error:nil];
+                            } else if ([profileJson[@"install"] isKindOfClass:[NSDictionary class]] &&
+                                       [profileJson[@"install"][@"versionInfo"] isKindOfClass:[NSDictionary class]]) {
+                                // Forge 1.17+ (install.versionInfo format)
+                                versionData = [NSJSONSerialization dataWithJSONObject:profileJson[@"install"][@"versionInfo"] options:0 error:nil];
                             } else {
-                                // Some profiles store version info at root level
+                                // Fallback: use whole profile as version data
                                 id possibleInfo = profileJson;
                                 if ([possibleInfo isKindOfClass:[NSDictionary class]]) {
                                     versionData = [NSJSONSerialization dataWithJSONObject:possibleInfo options:0 error:nil];
@@ -379,7 +395,9 @@ static NSArray *kLoaders;
 
             // For NeoForge, ensure the universal jar library is in the version JSON
             if ([name hasPrefix:@"neoforge-"]) {
-                NSString *neoVersion = [name substringFromIndex:@"neoforge-".length];
+                NSString *afterPrefix = [name substringFromIndex:@"neoforge-".length];
+                NSRange hyphen = [afterPrefix rangeOfString:@"-"];
+                NSString *neoVersion = hyphen.location != NSNotFound ? [afterPrefix substringFromIndex:hyphen.location + 1] : afterPrefix;
                 NSMutableDictionary *versionInfo = [NSJSONSerialization JSONObjectWithData:versionData options:NSJSONReadingMutableContainers error:nil];
                 if ([versionInfo isKindOfClass:[NSDictionary class]]) {
                     NSMutableArray *libs = versionInfo[@"libraries"];
@@ -411,7 +429,48 @@ static NSArray *kLoaders;
                 }
             }
 
+            // For standard Forge, ensure the main client jar is in the version JSON
+            if ([name hasPrefix:@"forge-"]) {
+                NSString *afterPrefix = [name substringFromIndex:@"forge-".length];
+                // afterPrefix = "<mcVer>-<forgeVer>" e.g. "1.20.1-47.1.0"
+                NSMutableDictionary *versionInfo = [NSJSONSerialization JSONObjectWithData:versionData options:NSJSONReadingMutableContainers error:nil];
+                if ([versionInfo isKindOfClass:[NSDictionary class]]) {
+                    NSMutableArray *libs = versionInfo[@"libraries"];
+                    if (![libs isKindOfClass:[NSMutableArray class]]) {
+                        libs = [NSMutableArray array];
+                        versionInfo[@"libraries"] = libs;
+                    }
+                    BOOL alreadyExists = NO;
+                    for (NSDictionary *lib in libs) {
+                        if ([lib[@"name"] hasPrefix:@"net.minecraftforge:forge:"]) {
+                            alreadyExists = YES;
+                            break;
+                        }
+                    }
+                    if (!alreadyExists) {
+                        NSString *forgeLibName = [NSString stringWithFormat:@"net.minecraftforge:forge:%@", afterPrefix];
+                        NSString *jarPath = [NSString stringWithFormat:@"net/minecraftforge/forge/%@/forge-%@.jar", afterPrefix, afterPrefix];
+                        [libs addObject:@{
+                            @"name": forgeLibName,
+                            @"url": @"https://maven.minecraftforge.net/",
+                            @"downloads": @{
+                                @"artifact": @{
+                                    @"path": jarPath,
+                                    @"url": [NSString stringWithFormat:@"https://maven.minecraftforge.net/%@", jarPath]
+                                }
+                            }
+                        }];
+                    }
+                    versionData = [NSJSONSerialization dataWithJSONObject:versionInfo options:0 error:nil];
+                }
+            }
+
             NSString *jsonPath = [versionDir stringByAppendingPathComponent:[NSString stringWithFormat:@"%@.json", finalName]];
+
+            if ([NSJSONSerialization JSONObjectWithData:versionData options:0 error:nil] == nil) {
+                self.statusLabel.text = [NSString stringWithFormat:@"Failed to parse version profile: %@", finalName];
+                return;
+            }
             [versionData writeToFile:jsonPath atomically:YES];
 
             VersionDirectoryManager.shared.currentVersion = finalName;

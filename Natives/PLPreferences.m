@@ -48,7 +48,8 @@
             @"virtmouse_enable": @NO,
             @"gyroscope_enable": @NO,
             @"gyroscope_invert_x_axis": @NO,
-            @"gyroscope_sensitivity": @(100)
+            @"gyroscope_sensitivity": @(100),
+            @"gamepad_sensitivity": @(100)
         }.mutableCopy,
         @"java": @{
             @"java_homes": @{
@@ -95,31 +96,22 @@
     if (global) {
         // Preferences that cannot be isolated
         NSDictionary *general = @{
-            @"game_directory": @"default",
-            @"hidden_sidebar": @(realUIIdiom == UIUserInterfaceIdiomPhone),
-            @"appicon": @"AppIcon-Light"
+            @"game_directory": @"default"
         };
         [defaults[@"general"] addEntriesFromDictionary:general];
-
-        defaults[@"java"][@"manage_runtime"] = @""; // stub
         defaults[@"debug"] = @{
             @"debug_always_attached_jit": @NO,
             @"debug_skip_wait_jit": @NO,
             @"debug_hide_home_indicator": @NO,
             @"debug_ipad_ui": @(realUIIdiom == UIUserInterfaceIdiomPad),
             @"debug_auto_correction": @YES,
-            @"debug_show_layout_bounds": @NO,
-            @"debug_show_layout_overlap": @NO,
             @"debug_server_enabled": @NO,
             @"debug_server_port": @(9090),
             @"debug_server_token": @"",
             @"debug_server_localhost_only": @NO
         }.mutableCopy;
         defaults[@"warnings"] = @{
-            @"local_warn": @YES,
-            @"mem_warn": @YES,
-            @"auto_ram_warn": @YES,
-            @"limited_ram_warn": @YES
+            @"local_warn": @YES
         }.mutableCopy;
         // TODO: isolate this or add account picker into profile editor(?)
         defaults[@"internal"][@"selected_account"] = @"";

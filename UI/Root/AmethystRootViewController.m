@@ -4,6 +4,7 @@
 #import "ThemeManager.h"
 #import "TransitionAnimator.h"
 #import "MainCoordinator.h"
+#import "LauncherPreferences.h"
 
 @interface AmethystRootViewController () <RightPanelDelegate, TopBarDelegate>
 @property (nonatomic) TopBarView *topBar;
@@ -69,21 +70,27 @@
     UIEdgeInsets safeArea = self.view.safeAreaInsets;
 
     CGFloat topBarY = safeArea.top;
+
+    BOOL isLandscape = bounds.size.width > bounds.size.height;
+    CGFloat leftInset = isLandscape ? safeArea.left : 0;
+    CGFloat rightInset = isLandscape ? safeArea.right : 0;
+
     CGFloat contentTop = topBarY + topBarHeight;
     CGFloat contentHeight = bounds.size.height - contentTop - safeArea.bottom;
-    CGFloat contentWidth = bounds.size.width - sidebarWidth - 1 - rightPanelWidth;
+    CGFloat contentWidth = bounds.size.width - leftInset - sidebarWidth - 1 - rightPanelWidth - rightInset;
 
-    _topBar.frame = CGRectMake(0, topBarY, bounds.size.width, topBarHeight);
+    _topBar.frame = CGRectMake(leftInset, topBarY, bounds.size.width - leftInset - rightInset, topBarHeight);
 
     _backgroundImageView.frame = bounds;
 
-    _sidebarVC.view.frame = CGRectMake(0, contentTop, sidebarWidth, contentHeight);
-    _sidebarBorder.frame = CGRectMake(sidebarWidth, contentTop, 1, contentHeight);
+    CGFloat sidebarX = leftInset;
+    _sidebarVC.view.frame = CGRectMake(sidebarX, contentTop, sidebarWidth, contentHeight);
+    _sidebarBorder.frame = CGRectMake(sidebarX + sidebarWidth, contentTop, 1, contentHeight);
 
-    CGFloat rightX = bounds.size.width - rightPanelWidth;
+    CGFloat rightX = bounds.size.width - rightPanelWidth - rightInset;
     _rightPanelVC.view.frame = CGRectMake(rightX, contentTop, rightPanelWidth, contentHeight);
 
-    _contentContainer.frame = CGRectMake(sidebarWidth + 1, contentTop, contentWidth, contentHeight);
+    _contentContainer.frame = CGRectMake(sidebarX + sidebarWidth + 1, contentTop, contentWidth, contentHeight);
 
     if (self.currentContentVC) {
         self.currentContentVC.view.frame = _contentContainer.bounds;
@@ -98,6 +105,13 @@
 - (void)viewSafeAreaInsetsDidChange {
     [super viewSafeAreaInsetsDidChange];
     [self.view setNeedsLayout];
+}
+
+- (UIInterfaceOrientationMask)supportedInterfaceOrientations {
+    if (getPrefBool(@"general.lock_landscape")) {
+        return UIInterfaceOrientationMaskLandscape;
+    }
+    return [super supportedInterfaceOrientations];
 }
 
 - (void)updateColors {
@@ -238,4 +252,13 @@
     [[NSNotificationCenter defaultCenter] removeObserver:self];
 }
 
+@end
+
+@implementation UINavigationController (LockLandscape)
+- (UIInterfaceOrientationMask)supportedInterfaceOrientations {
+    if (getPrefBool(@"general.lock_landscape")) {
+        return UIInterfaceOrientationMaskLandscape;
+    }
+    return [super supportedInterfaceOrientations];
+}
 @end

@@ -34,14 +34,15 @@ $(CLASSES): $(OUTPUTDIR)/%.class: $(SOURCEDIR)/%.java
 	@$(BOOTJDK)/javac $(JCFLAGS) -d $(OUTPUTDIR)/classes $<
 	@cp $(@:$(OUTPUTDIR)/$(TARGET)/%.class=$(OUTPUTDIR)/classes/%*.class) $(dir $@)/
 
-$(OUTPUTDIR)/launcher.jar: $(CLASSES) check_empty_classes
+$(OUTPUTDIR)/launcher.jar: $(CLASSES)
 	@set -e
 	@echo "Creating $@"
 	@cp -r $(SOURCEDIR)/launcher/META-INF $(basename $@)/ 2>/dev/null || true
+	@find $(basename $@) -name '*.class' -size 0 | grep -v '\$$' && { echo "Error: found empty class files"; exit 1; } || true
 	@$(BOOTJDK)/jar -cf $@ -C $(basename $@) .
 
 # Build LWJGL 3.3.3
-$(OUTPUTDIR)/lwjgl-3.3.3.jar: $(CLASSES) check_empty_classes
+$(OUTPUTDIR)/lwjgl-3.3.3.jar: $(CLASSES)
 	@set -e
 	@echo "Creating $@"
 	@mkdir -p $(OUTPUTDIR)/lwjgl33_lib
@@ -54,8 +55,7 @@ $(OUTPUTDIR)/lwjgl-3.3.3.jar: $(CLASSES) check_empty_classes
 	@cp $(SOURCEDIR)/launcher/META-INF/services/javax.sound.sampled.spi.MixerProvider $(OUTPUTDIR)/lwjgl33_lib/META-INF/services/
 	@$(BOOTJDK)/jar -cf $@ -C $(OUTPUTDIR)/lwjgl33_lib .
 
-# Build LWJGL 3.4.1
-$(OUTPUTDIR)/lwjgl-3.4.1.jar: $(CLASSES) check_empty_classes
+$(OUTPUTDIR)/lwjgl-3.4.1.jar: $(CLASSES)
 	@set -e
 	@echo "Creating $@"
 	@mkdir -p $(OUTPUTDIR)/lwjgl41_lib

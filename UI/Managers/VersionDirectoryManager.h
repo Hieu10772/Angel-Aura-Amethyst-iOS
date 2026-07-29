@@ -7,6 +7,7 @@ NS_ASSUME_NONNULL_BEGIN
 @property (nonatomic) NSString *mcVersion;
 @property (nonatomic) NSString *modLoader;
 + (instancetype)profileWithVersionId:(NSString *)versionId;
++ (NSString *)cleanMinecraftVersion:(NSString *)rawVersion;
 - (NSString *)iconName;
 @end
 

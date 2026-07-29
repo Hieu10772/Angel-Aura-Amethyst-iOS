@@ -8,4 +8,6 @@
 @property(nonatomic, copy) void(^sendCharMods)(jchar codepoint, int mods);
 @property(nonatomic, copy) void(^sendKey)(int key, int scancode, int action, int mods);
 
+@property(nonatomic) BOOL skipNextTextInsertion;
+
 @end

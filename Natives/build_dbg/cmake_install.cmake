@@ -1,4 +1,4 @@
-# Install script for directory: /Volumes/D/Amethyst-iOS-25/Natives
+# Install script for directory: /Volumes/D/Angel-Aura-Amethyst-iOS/Angel-Aura-Amethyst-iOS/Natives
 
 # Set the install prefix
 if(NOT DEFINED CMAKE_INSTALL_PREFIX)
@@ -40,7 +40,7 @@ endif()
 string(REPLACE ";" "\n" CMAKE_INSTALL_MANIFEST_CONTENT
        "${CMAKE_INSTALL_MANIFEST_FILES}")
 if(CMAKE_INSTALL_LOCAL_ONLY)
-  file(WRITE "/Volumes/D/Amethyst-iOS-25/Natives/build_dbg/install_local_manifest.txt"
+  file(WRITE "/Volumes/D/Angel-Aura-Amethyst-iOS/Angel-Aura-Amethyst-iOS/Natives/build_dbg/install_local_manifest.txt"
      "${CMAKE_INSTALL_MANIFEST_CONTENT}")
 endif()
 if(CMAKE_INSTALL_COMPONENT)
@@ -56,6 +56,6 @@ else()
 endif()
 
 if(NOT CMAKE_INSTALL_LOCAL_ONLY)
-  file(WRITE "/Volumes/D/Amethyst-iOS-25/Natives/build_dbg/${CMAKE_INSTALL_MANIFEST}"
+  file(WRITE "/Volumes/D/Angel-Aura-Amethyst-iOS/Angel-Aura-Amethyst-iOS/Natives/build_dbg/${CMAKE_INSTALL_MANIFEST}"
      "${CMAKE_INSTALL_MANIFEST_CONTENT}")
 endif()

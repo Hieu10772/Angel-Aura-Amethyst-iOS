@@ -74,7 +74,7 @@
 		</dict>
 	</dict>
 	<key>CFBundleIdentifier</key>
-	<string>org.angelauramc.amethyst</string>
+	<string>com.amethyst.zad626</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
@@ -82,14 +82,14 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>1.0</string>
+	<string>1.1</string>
 	<key>CFBundleSignature</key>
 	<string>????</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
 			<key>CFBundleURLName</key>
-			<string>org.angelauramc.amethyst.urlscheme</string>
+			<string>com.amethyst.zad626.urlscheme</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
 				<string>amethyst</string>
@@ -97,7 +97,7 @@
 		</dict>
 		<dict>
 			<key>CFBundleURLName</key>
-			<string>org.angelauramc.amethyst.msal</string>
+			<string>com.amethyst.zad626.msal</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
 				<string>ms-xal-00000000402b5328</string>

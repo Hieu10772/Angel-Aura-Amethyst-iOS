@@ -8,7 +8,7 @@ set(CMAKE_DEPENDS_LANGUAGES
 
 # The set of dependency files which are needed:
 set(CMAKE_DEPENDS_DEPENDENCY_FILES
-  "/Volumes/D/Amethyst-iOS-25/Natives/awt_xawt/xawt_fake.m" "CMakeFiles/awt_xawt.dir/awt_xawt/xawt_fake.m.o" "gcc" "CMakeFiles/awt_xawt.dir/awt_xawt/xawt_fake.m.o.d"
+  "/Volumes/D/Angel-Aura-Amethyst-iOS/Angel-Aura-Amethyst-iOS/Natives/awt_xawt/xawt_fake.m" "CMakeFiles/awt_xawt.dir/awt_xawt/xawt_fake.m.o" "gcc" "CMakeFiles/awt_xawt.dir/awt_xawt/xawt_fake.m.o.d"
   )
 
 # Targets to which this target links which contain Fortran sources.

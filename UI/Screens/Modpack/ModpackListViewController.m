@@ -21,6 +21,7 @@
 @property (nonatomic) BOOL hasMore;
 @property (nonatomic) BOOL isLoadingMore;
 @property (nonatomic) NSString *currentQuery;
+@property (nonatomic) NSInteger pageSize;
 @end
 
 @implementation ModpackListViewController
@@ -32,6 +33,7 @@
     _hasMore = YES;
     _isLoadingMore = NO;
     _modpacks = [NSMutableArray array];
+    _pageSize = 20;
     [self setup];
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(updateColors) name:ThemeDidChangeNotification object:nil];
     [self updateColors];
@@ -153,10 +155,19 @@
 }
 
 - (void)trimModpacksIfNeeded {
-    if (self.modpacks.count <= 150) return;
-    NSInteger removeCount = ((self.modpacks.count - 150) / 50) * 50;
-    if (removeCount <= 0) return;
+    NSInteger maxVisible = 60;
+    if (self.modpacks.count <= maxVisible) return;
+
+    NSInteger pagesToRemove = (self.modpacks.count - maxVisible) / self.pageSize;
+    if (pagesToRemove <= 0) return;
+
+    NSInteger removeCount = pagesToRemove * self.pageSize;
     [self.modpacks removeObjectsInRange:NSMakeRange(0, removeCount)];
+
+    CGFloat offsetY = self.tableView.contentOffset.y;
+    CGFloat adjustedOffset = offsetY - removeCount * 64;
+    if (adjustedOffset < 0) adjustedOffset = 0;
+
     while (self.pageOffsets.count > 0) {
         NSNumber *firstOffset = self.pageOffsets.firstObject;
         NSArray *page = self.pageCache[firstOffset];
@@ -168,6 +179,8 @@
             break;
         }
     }
+
+    self.tableView.contentOffset = CGPointMake(0, adjustedOffset);
 }
 
 - (void)loadMoreModpacks {
@@ -239,7 +252,7 @@
 
     NSDictionary *mp = _modpacks[indexPath.row];
     NSNumber *downloads = mp[@"downloads"];
-    NSString *dlStr = downloads ? [NSString stringWithFormat:@"↑ %@", [self formatNumber:downloads]] : @"";
+    NSString *dlStr = downloads ? [NSString stringWithFormat:@"\u2191 %@", [self formatNumber:downloads]] : @"";
     NSString *subtitle = [NSString stringWithFormat:@"%@  |  %@", dlStr, mp[@"author"] ?: @""];
 
     [cell configureWithTitle:mp[@"title"] subtitle:subtitle iconURL:mp[@"icon_url"] placeholder:@"square.stack.3d.up"];

@@ -48,7 +48,9 @@ typedef void(^CreateView)(UITableViewCell *, NSString *, NSDictionary *);
     [self loadGamepadConfigurationFile];
     self.prefControllerTypes = @[@{@"name": @"xbox"}, @{@"name": @"playstation"}];
     
-    self.prefSections = @[@"config_files", @"game_mappings", @"menu_mappings", @"controller_style"];
+    self.prefSections = @[@"config_files", @"game_mappings", @"menu_mappings", @"controller_style",
+                          @"keyboard_mappings", @"keyboard_menu_mappings",
+                          @"mouse_mappings", @"mouse_menu_mappings"];
     
     self.navigationItem.leftBarButtonItem = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemSave target:self action:@selector(actionMenuSave)];
     self.navigationItem.rightBarButtonItem = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemClose target:self action:@selector(exitButtonSelector)];
@@ -61,12 +63,84 @@ typedef void(^CreateView)(UITableViewCell *, NSString *, NSDictionary *);
 - (void)loadGamepadConfigurationFile {
     NSString *gamepadPath = [NSString stringWithFormat:@"%s/controlmap/gamepads/%@", getenv("POJAV_HOME"), getPrefObject(@"control.default_gamepad_ctrl")];
     self.currentMappings = parseJSONFromFile(gamepadPath);
-    self.currentFileName = [getPrefObject(@"control.default_ctrl") stringByDeletingPathExtension];
+    self.currentFileName = [getPrefObject(@"control.default_gamepad_ctrl") stringByDeletingPathExtension];
     NSPredicate *filterPredicate = [NSPredicate predicateWithBlock:^BOOL(id obj, NSDictionary *dict) {
         return ![obj[@"name"] hasPrefix:@"mouse_"];
     }];
     [self.currentMappings[@"mGameMappingList"] filterUsingPredicate:filterPredicate];
     [self.currentMappings[@"mMenuMappingList"] filterUsingPredicate:filterPredicate];
+
+    if (self.currentMappings[@"mKeyboardGameMappingList"] == nil) {
+        self.currentMappings[@"mKeyboardGameMappingList"] = [self defaultKeyboardGameMappings];
+    }
+    if (self.currentMappings[@"mKeyboardMenuMappingList"] == nil) {
+        self.currentMappings[@"mKeyboardMenuMappingList"] = [self defaultKeyboardMenuMappings];
+    }
+    if (self.currentMappings[@"mMouseGameMappingList"] == nil) {
+        self.currentMappings[@"mMouseGameMappingList"] = [self defaultMouseGameMappings];
+    }
+    if (self.currentMappings[@"mMouseMenuMappingList"] == nil) {
+        self.currentMappings[@"mMouseMenuMappingList"] = [self defaultMouseMenuMappings];
+    }
+}
+
+- (NSMutableArray *)defaultKeyboardGameMappings {
+    return [NSMutableArray arrayWithArray:@[
+        @{@"name": @"key_w", @"keycode": @(GLFW_KEY_W)},
+        @{@"name": @"key_a", @"keycode": @(GLFW_KEY_A)},
+        @{@"name": @"key_s", @"keycode": @(GLFW_KEY_S)},
+        @{@"name": @"key_d", @"keycode": @(GLFW_KEY_D)},
+        @{@"name": @"key_space", @"keycode": @(GLFW_KEY_SPACE)},
+        @{@"name": @"key_shift", @"keycode": @(GLFW_KEY_LEFT_SHIFT)},
+        @{@"name": @"key_ctrl", @"keycode": @(GLFW_KEY_LEFT_CONTROL)},
+        @{@"name": @"key_e", @"keycode": @(GLFW_KEY_E)},
+        @{@"name": @"key_q", @"keycode": @(GLFW_KEY_Q)},
+        @{@"name": @"key_1", @"keycode": @(GLFW_KEY_1)},
+        @{@"name": @"key_2", @"keycode": @(GLFW_KEY_2)},
+        @{@"name": @"key_3", @"keycode": @(GLFW_KEY_3)},
+        @{@"name": @"key_4", @"keycode": @(GLFW_KEY_4)},
+        @{@"name": @"key_5", @"keycode": @(GLFW_KEY_5)},
+        @{@"name": @"key_6", @"keycode": @(GLFW_KEY_6)},
+        @{@"name": @"key_7", @"keycode": @(GLFW_KEY_7)},
+        @{@"name": @"key_8", @"keycode": @(GLFW_KEY_8)},
+        @{@"name": @"key_9", @"keycode": @(GLFW_KEY_9)},
+        @{@"name": @"key_tab", @"keycode": @(GLFW_KEY_TAB)},
+        @{@"name": @"key_esc", @"keycode": @(GLFW_KEY_ESCAPE)},
+        @{@"name": @"key_f", @"keycode": @(GLFW_KEY_F)},
+        @{@"name": @"key_enter", @"keycode": @(GLFW_KEY_ENTER)},
+    ]];
+}
+
+- (NSMutableArray *)defaultKeyboardMenuMappings {
+    return [NSMutableArray arrayWithArray:@[
+        @{@"name": @"key_w", @"keycode": @(GLFW_KEY_DPAD_UP)},
+        @{@"name": @"key_s", @"keycode": @(GLFW_KEY_DPAD_DOWN)},
+        @{@"name": @"key_a", @"keycode": @(GLFW_KEY_DPAD_LEFT)},
+        @{@"name": @"key_d", @"keycode": @(GLFW_KEY_DPAD_RIGHT)},
+        @{@"name": @"key_enter", @"keycode": @(GLFW_KEY_ENTER)},
+        @{@"name": @"key_esc", @"keycode": @(GLFW_KEY_ESCAPE)},
+        @{@"name": @"key_space", @"keycode": @(GLFW_KEY_SPACE)},
+        @{@"name": @"key_tab", @"keycode": @(GLFW_KEY_TAB)},
+    ]];
+}
+
+- (NSMutableArray *)defaultMouseGameMappings {
+    return [NSMutableArray arrayWithArray:@[
+        @{@"name": @"mouse_left", @"keycode": @(SPECIALBTN_MOUSEPRI)},
+        @{@"name": @"mouse_right", @"keycode": @(SPECIALBTN_MOUSESEC)},
+        @{@"name": @"mouse_middle", @"keycode": @(SPECIALBTN_MOUSEMID)},
+        @{@"name": @"mouse_scroll_up", @"keycode": @(SPECIALBTN_SCROLLUP)},
+        @{@"name": @"mouse_scroll_down", @"keycode": @(SPECIALBTN_SCROLLDOWN)},
+    ]];
+}
+
+- (NSMutableArray *)defaultMouseMenuMappings {
+    return [NSMutableArray arrayWithArray:@[
+        @{@"name": @"mouse_left", @"keycode": @(SPECIALBTN_MOUSEPRI)},
+        @{@"name": @"mouse_right", @"keycode": @(SPECIALBTN_MOUSESEC)},
+        @{@"name": @"mouse_scroll_up", @"keycode": @(SPECIALBTN_SCROLLUP)},
+        @{@"name": @"mouse_scroll_down", @"keycode": @(SPECIALBTN_SCROLLDOWN)},
+    ]];
 }
 
 - (void)viewWillAppear:(BOOL)animated {
@@ -81,12 +155,16 @@ typedef void(^CreateView)(UITableViewCell *, NSString *, NSDictionary *);
 
 - (NSArray *)prefContentForIndex:(NSInteger)index {
     switch (index) {
-        case 0: return nil; // one single cell is defined in cellForRowAtIndexPath
+        case 0: return nil;
         case 1: return self.currentMappings[@"mGameMappingList"];
         case 2: return self.currentMappings[@"mMenuMappingList"];
         case 3: return self.prefControllerTypes;
+        case 4: return self.currentMappings[@"mKeyboardGameMappingList"];
+        case 5: return self.currentMappings[@"mKeyboardMenuMappingList"];
+        case 6: return self.currentMappings[@"mMouseGameMappingList"];
+        case 7: return self.currentMappings[@"mMouseMenuMappingList"];
         default: return nil;
-    } 
+    }
 }
 
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
@@ -143,6 +221,52 @@ typedef void(^CreateView)(UITableViewCell *, NSString *, NSDictionary *);
         } else {
             cell.accessoryType = UITableViewCellAccessoryNone;
         }
+    } else if(indexPath.section == 4 || indexPath.section == 5) {
+        NSNumber *keycode = (NSNumber *)item[@"keycode"];
+        cell.textLabel.text = localize(([NSString stringWithFormat:@"controller_configurator.keyboard.title.%@", item[@"name"]]), nil);
+        PickTextField *view = (id)cell.accessoryView;
+        if (view == nil) {
+            view = [[PickTextField alloc] initWithFrame:CGRectMake(0, 0, cell.bounds.size.width / 2.1, cell.bounds.size.height)];
+            [view addTarget:view action:@selector(resignFirstResponder) forControlEvents:UIControlEventEditingDidEndOnExit];
+            view.autocorrectionType = UITextAutocorrectionTypeNo;
+            view.autocapitalizationType = UITextAutocapitalizationTypeNone;
+            view.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleLeftMargin;
+            view.delegate = self;
+            view.returnKeyType = UIReturnKeyDone;
+            view.tag = indexPath.section;
+            view.textAlignment = NSTextAlignmentRight;
+            view.tintColor = UIColor.clearColor;
+            view.adjustsFontSizeToFitWidth = YES;
+            view.inputView = self.editPickMapping;
+            [view setupDoneButtonWithTarget:self action:@selector(closeTextField:)];
+            cell.accessoryView = view;
+        }
+        view.text = self.keyCodeMap[[self.keyValueMap indexOfObject:keycode]];
+        objc_setAssociatedObject(view, @"gamepad_button", item[@"name"], OBJC_ASSOCIATION_ASSIGN);
+        objc_setAssociatedObject(view, @"item", item, OBJC_ASSOCIATION_ASSIGN);
+    } else if(indexPath.section == 6 || indexPath.section == 7) {
+        NSNumber *keycode = (NSNumber *)item[@"keycode"];
+        cell.textLabel.text = localize(([NSString stringWithFormat:@"controller_configurator.mouse.title.%@", item[@"name"]]), nil);
+        PickTextField *view = (id)cell.accessoryView;
+        if (view == nil) {
+            view = [[PickTextField alloc] initWithFrame:CGRectMake(0, 0, cell.bounds.size.width / 2.1, cell.bounds.size.height)];
+            [view addTarget:view action:@selector(resignFirstResponder) forControlEvents:UIControlEventEditingDidEndOnExit];
+            view.autocorrectionType = UITextAutocorrectionTypeNo;
+            view.autocapitalizationType = UITextAutocapitalizationTypeNone;
+            view.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleLeftMargin;
+            view.delegate = self;
+            view.returnKeyType = UIReturnKeyDone;
+            view.tag = indexPath.section;
+            view.textAlignment = NSTextAlignmentRight;
+            view.tintColor = UIColor.clearColor;
+            view.adjustsFontSizeToFitWidth = YES;
+            view.inputView = self.editPickMapping;
+            [view setupDoneButtonWithTarget:self action:@selector(closeTextField:)];
+            cell.accessoryView = view;
+        }
+        view.text = self.keyCodeMap[[self.keyValueMap indexOfObject:keycode]];
+        objc_setAssociatedObject(view, @"gamepad_button", item[@"name"], OBJC_ASSOCIATION_ASSIGN);
+        objc_setAssociatedObject(view, @"item", item, OBJC_ASSOCIATION_ASSIGN);
     }
     return cell;
 }

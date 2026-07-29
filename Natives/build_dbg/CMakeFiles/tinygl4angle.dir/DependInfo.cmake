@@ -8,8 +8,8 @@ set(CMAKE_DEPENDS_LANGUAGES
 
 # The set of dependency files which are needed:
 set(CMAKE_DEPENDS_DEPENDENCY_FILES
-  "/Volumes/D/Amethyst-iOS-25/Natives/external/gl4es/string_utils.c" "CMakeFiles/tinygl4angle.dir/external/gl4es/string_utils.c.o" "gcc" "CMakeFiles/tinygl4angle.dir/external/gl4es/string_utils.c.o.d"
-  "/Volumes/D/Amethyst-iOS-25/Natives/external/gl4es/tinygl4angle.c" "CMakeFiles/tinygl4angle.dir/external/gl4es/tinygl4angle.c.o" "gcc" "CMakeFiles/tinygl4angle.dir/external/gl4es/tinygl4angle.c.o.d"
+  "/Volumes/D/Angel-Aura-Amethyst-iOS/Angel-Aura-Amethyst-iOS/Natives/external/gl4es/string_utils.c" "CMakeFiles/tinygl4angle.dir/external/gl4es/string_utils.c.o" "gcc" "CMakeFiles/tinygl4angle.dir/external/gl4es/string_utils.c.o.d"
+  "/Volumes/D/Angel-Aura-Amethyst-iOS/Angel-Aura-Amethyst-iOS/Natives/external/gl4es/tinygl4angle.c" "CMakeFiles/tinygl4angle.dir/external/gl4es/tinygl4angle.c.o" "gcc" "CMakeFiles/tinygl4angle.dir/external/gl4es/tinygl4angle.c.o.d"
   )
 
 # Targets to which this target links which contain Fortran sources.

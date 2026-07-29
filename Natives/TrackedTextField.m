@@ -13,7 +13,6 @@ extern bool isUseStackQueueCall;
 @interface TrackedTextField()
 @property(nonatomic) int lastTextPos;
 @property(nonatomic) CGFloat lastPointX;
-@property(nonatomic) BOOL ignoreBridgeEvents; 
 @end
 
 @implementation TrackedTextField
@@ -106,98 +105,43 @@ extern bool isUseStackQueueCall;
     return YES;
 }
 
-- (void)insertText:(NSString *)text {
-    // NSLog(@"[KeyboardDebug] UIKeyInput insertText received raw input from iOS: '%@'", text);
-    if (self.ignoreBridgeEvents) {
-        // NSLog(@"[KeyboardDebug] insertText bypassed (ignoreBridgeEvents is active)");
-        [super insertText:text];
-        return;
-    }
-    self.ignoreBridgeEvents = YES;
-
-    int cursorPos = [super offsetFromPosition:self.beginningOfDocument toPosition:self.selectedTextRange.start];
-    int off = self.lastTextPos - cursorPos;
-    if (off > 0) {
-        [self sendMultiBackspaces:off];
-    }
-
-    self.lastTextPos = cursorPos + text.length;
-    [self sendText:text];
-
-    [super insertText:text];
-    self.ignoreBridgeEvents = NO;
-}
-
-- (void)replaceRange:(UITextRange *)range withText:(NSString *)text {
-    // NSLog(@"[KeyboardDebug] replaceRange:withText: caught auto-correction/replacement: '%@'", text);
-    if (self.ignoreBridgeEvents) {
-        [super replaceRange:range withText:text];
-        return;
-    }
-    self.ignoreBridgeEvents = YES;
-
-    int oldLength = [super offsetFromPosition:range.start toPosition:range.end];
-    [self sendMultiBackspaces:oldLength];
-    [self sendText:text];
-    self.lastTextPos += text.length - oldLength;
-
-    [super replaceRange:range withText:text];
-    self.ignoreBridgeEvents = NO;
-}
-
 - (NSRange)insertFilteredText:(NSString *)text {
-    // NSLog(@"[KeyboardDebug] Private insertFilteredText called: '%@'", text);
-    if (self.ignoreBridgeEvents) {
+    if (self.skipNextTextInsertion) {
+        self.skipNextTextInsertion = NO;
         return [super insertFilteredText:text];
     }
-    self.ignoreBridgeEvents = YES;
 
     int cursorPos = [super offsetFromPosition:self.beginningOfDocument toPosition:self.selectedTextRange.start];
+
     int off = self.lastTextPos - cursorPos;
     if (off > 0) {
         [self sendMultiBackspaces:off];
     }
 
     self.lastTextPos = cursorPos + text.length;
+
     [self sendText:text];
 
     NSRange range = [super insertFilteredText:text];
-    self.ignoreBridgeEvents = NO;
     return range;
 }
 
 - (id)replaceRangeWithTextWithoutClosingTyping:(UITextRange *)range replacementText:(NSString *)text
 {
-    // NSLog(@"[KeyboardDebug] replaceRangeWithTextWithoutClosingTyping called: '%@'", text);
-    if (self.ignoreBridgeEvents) {
-        return [super replaceRangeWithTextWithoutClosingTyping:range replacementText:text];
-    }
-    self.ignoreBridgeEvents = YES;
-
     int oldLength = [super offsetFromPosition:range.start toPosition:range.end];
     [self sendMultiBackspaces:oldLength];
     [self sendText:text];
     self.lastTextPos += text.length - oldLength;
 
-    id result = [super replaceRangeWithTextWithoutClosingTyping:range replacementText:text];
-    self.ignoreBridgeEvents = NO;
-    return result;
+    return [super replaceRangeWithTextWithoutClosingTyping:range replacementText:text];
 }
 
 - (void)setAttributedMarkedText:(NSAttributedString *)markedText selectedRange:(NSRange)selectedRange {
-    // NSLog(@"[KeyboardDebug] setAttributedMarkedText (marked text update): '%@'", markedText.string);
-    if (self.ignoreBridgeEvents) {
-        [super setAttributedMarkedText:markedText selectedRange:selectedRange];
-        return;
-    }
-    self.ignoreBridgeEvents = YES;
-
     NSInteger markedLength = [self offsetFromPosition:self.markedTextRange.start toPosition:self.markedTextRange.end];
     [self sendMultiBackspaces:markedLength];
 
     [super setAttributedMarkedText:markedText selectedRange:selectedRange];
     [self sendText:markedText.string];
-    self.ignoreBridgeEvents = NO;
 }
 
 - (void)setText:(NSString *)text {

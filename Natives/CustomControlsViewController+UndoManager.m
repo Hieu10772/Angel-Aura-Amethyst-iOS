@@ -119,4 +119,85 @@
     }
 }
 
+- (void)doCopyButton:(ControlButton *)sourceButton {
+    NSUndoManager *undo = self.undoManager;
+    undo.actionName = localize(@"Copy", nil);
+
+    if ([sourceButton isKindOfClass:[ControlSubButton class]]) {
+        ControlSubButton *srcSub = (ControlSubButton *)sourceButton;
+        ControlDrawer *parentDrawer = srcSub.parentDrawer;
+
+        NSMutableDictionary *newProps = [srcSub.properties mutableCopy];
+        newProps[@"dynamicX"] = [NSString stringWithFormat:@"(%@) + ${margin}", srcSub.properties[@"dynamicX"]];
+        newProps[@"dynamicY"] = [NSString stringWithFormat:@"(%@) + ${margin}", srcSub.properties[@"dynamicY"]];
+
+        ControlSubButton *newButton = [ControlSubButton buttonWithProperties:newProps];
+        newButton.parentDrawer = parentDrawer;
+
+        NSUInteger index = [parentDrawer.buttons indexOfObject:sourceButton] + 1;
+        [self doAddButton:newButton atIndex:@(index)];
+
+        [newButton addGestureRecognizer:[[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(showControlPopover:)]];
+        [newButton addGestureRecognizer:[[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(onTouch:)]];
+
+    } else if ([sourceButton isKindOfClass:[ControlDrawer class]]) {
+        ControlDrawer *srcDrawer = (ControlDrawer *)sourceButton;
+
+        NSMutableDictionary *newDrawerData = [srcDrawer.drawerData mutableCopy];
+        newDrawerData[@"properties"] = [srcDrawer.drawerData[@"properties"] mutableCopy];
+        newDrawerData[@"buttonProperties"] = [srcDrawer.drawerData[@"buttonProperties"] mutableCopy];
+
+        NSMutableDictionary *props = newDrawerData[@"properties"];
+        props[@"dynamicX"] = [NSString stringWithFormat:@"(%@) + ${margin}", srcDrawer.properties[@"dynamicX"]];
+        props[@"dynamicY"] = [NSString stringWithFormat:@"(%@) + ${margin}", srcDrawer.properties[@"dynamicY"]];
+
+        ControlDrawer *newDrawer = [ControlDrawer buttonWithData:newDrawerData];
+        newDrawer.areButtonsVisible = YES;
+
+        NSUInteger index = [self.ctrlView.layoutDictionary[@"mDrawerDataList"] indexOfObject:srcDrawer.drawerData] + 1;
+        [self doAddButton:newDrawer atIndex:@(index)];
+
+        [newDrawer addGestureRecognizer:[[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(showControlPopover:)]];
+        [newDrawer addGestureRecognizer:[[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(onTouch:)]];
+
+        for (int i = 0; i < [newDrawerData[@"buttonProperties"] count]; i++) {
+            NSMutableDictionary *subProps = newDrawerData[@"buttonProperties"][i];
+            ControlSubButton *subView = [ControlSubButton buttonWithProperties:subProps];
+            subView.parentDrawer = newDrawer;
+            [newDrawer addButton:subView];
+            [self.ctrlView addSubview:subView];
+
+            [subView addGestureRecognizer:[[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(showControlPopover:)]];
+            [subView addGestureRecognizer:[[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(onTouch:)]];
+        }
+        [newDrawer syncButtons];
+
+    } else if ([sourceButton isKindOfClass:[ControlJoystick class]]) {
+        NSMutableDictionary *newProps = [sourceButton.properties mutableCopy];
+        newProps[@"dynamicX"] = [NSString stringWithFormat:@"(%@) + ${margin}", sourceButton.properties[@"dynamicX"]];
+        newProps[@"dynamicY"] = [NSString stringWithFormat:@"(%@) + ${margin}", sourceButton.properties[@"dynamicY"]];
+
+        ControlJoystick *newButton = [ControlJoystick buttonWithProperties:newProps];
+
+        NSUInteger index = [self.ctrlView.layoutDictionary[@"mJoystickDataList"] indexOfObject:sourceButton.properties] + 1;
+        [self doAddButton:newButton atIndex:@(index)];
+
+        [newButton addGestureRecognizer:[[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(showControlPopover:)]];
+        [newButton addGestureRecognizer:[[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(onTouch:)]];
+
+    } else {
+        NSMutableDictionary *newProps = [sourceButton.properties mutableCopy];
+        newProps[@"dynamicX"] = [NSString stringWithFormat:@"(%@) + ${margin}", sourceButton.properties[@"dynamicX"]];
+        newProps[@"dynamicY"] = [NSString stringWithFormat:@"(%@) + ${margin}", sourceButton.properties[@"dynamicY"]];
+
+        ControlButton *newButton = [ControlButton buttonWithProperties:newProps];
+
+        NSUInteger index = [self.ctrlView.layoutDictionary[@"mControlDataList"] indexOfObject:sourceButton.properties] + 1;
+        [self doAddButton:newButton atIndex:@(index)];
+
+        [newButton addGestureRecognizer:[[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(showControlPopover:)]];
+        [newButton addGestureRecognizer:[[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(onTouch:)]];
+    }
+}
+
 @end

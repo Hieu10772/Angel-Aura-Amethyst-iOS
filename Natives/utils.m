@@ -30,7 +30,15 @@ BOOL isJITEnabled(BOOL checkCSFlags) {
 
     int flags;
     csops(getpid(), 0, &flags, sizeof(flags));
-    return (flags & CS_DEBUGGED) != 0;
+    if ((flags & CS_DEBUGGED) == 0) {
+        return NO;
+    }
+    if (!DeviceHasJITFlags(JIT_FLAG_FORCE_MIRRORED | JIT_FLAG_HAS_TXM)) {
+        // Device below iOS 26 or without TXM is sufficient at this point
+        return YES;
+    }
+    // Device with iOS 26+ and TXM requires a debugger attached for JIT script to bypass TXM restrictions
+    return JIT26IsLikelyDebuggerKeepAttached();
 }
 
 void openLink(UIViewController* sender, NSURL* link) {
@@ -197,9 +205,25 @@ BOOL DeviceCanCreateRXMap(void) {
     munmap(map, getpagesize());
     return ret == 0;
 }
-BOOL DeviceHasTXM(void) {
+BOOL DeviceHasTXMReal(void) {
     DIR *d = opendir("/private/preboot");
-    if(!d) return NO;
+    if(!d) {
+        // /private/preboot is not accessible in 27.0 and 26.6?, fallback to speculation
+        NSUInteger (*MGGetSInt64Answer)(NSString *) = dlsym(RTLD_DEFAULT, "MGGetSInt64Answer");
+        NSUInteger chipID = MGGetSInt64Answer(@"ChipID");
+        switch(chipID) {
+            case 0x8020: // A12
+            case 0x8027: // A12X/Z
+                return NO;
+            case 0x8030: // A13
+            case 0x8101: // A14
+            case 0x8103: // M1
+                if (@available(iOS 27.0, *)) return YES; return NO;
+            default:
+                if (@available(iOS 19.0, *)) return YES; return NO;
+        }
+    }
+    // deterministically detect TXM for 17.0-26.5?
     struct dirent *dir;
     char txmPath[PATH_MAX];
     while ((dir = readdir(d)) != NULL) {
@@ -211,6 +235,11 @@ BOOL DeviceHasTXM(void) {
     closedir(d);
     return access(txmPath, F_OK) == 0;
 }
+// Thin wrapper of DeviceHasJITFlags to respect overriden flag
+__exported BOOL DeviceHasTXM(void) {
+    return DeviceHasJITFlags(JIT_FLAG_HAS_TXM);
+}
+
 JITFlags DeviceGetJITFlags(BOOL refresh) {
     static JITFlags cachedFlags = 0;
     static dispatch_once_t onceToken;
@@ -229,17 +258,23 @@ JITFlags DeviceGetJITFlags(BOOL refresh) {
         
         if (@available(iOS 26.0, *)) {
             cachedFlags |= JIT_FLAG_IS_IOS_26;
-            // iOS 27 beta continues the same JIT model as iOS 26
             if (!DeviceCanCreateRXMap()) {
                 cachedFlags |= JIT_FLAG_FORCE_MIRRORED;
             }
         }
-        if (DeviceHasTXM()) {
+        if (DeviceHasTXMReal()) {
             cachedFlags |= JIT_FLAG_HAS_TXM;
         }
+        
+        if (refresh) NSLog(@"[JIT] Using computed JIT flags: 0x%X", cachedFlags);
     });
     return cachedFlags;
 }
 BOOL DeviceHasJITFlags(JITFlags flags) {
     return (DeviceGetJITFlags(NO) & flags) == flags;
+}
+
+BOOL JIT26IsLikelyDebuggerKeepAttached(void) {
+    // getppid() always returns launchd PID (1) unless debugger is actively attached
+    return getppid() != 1;
 }

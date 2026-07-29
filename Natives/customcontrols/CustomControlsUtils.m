@@ -391,7 +391,58 @@ void generateAndSaveDefaultControlForGamepad() {
     
     [dict[@"mMenuMappingList"] addObject:createGamepadButton(@"thumb_left", GLFW_GAMEPAD_BUTTON_LEFT_THUMB, GLFW_KEY_UNKNOWN)];
     [dict[@"mMenuMappingList"] addObject:createGamepadButton(@"thumb_right", GLFW_GAMEPAD_BUTTON_RIGHT_THUMB, GLFW_KEY_UNKNOWN)];
-    
+
+    dict[@"mKeyboardGameMappingList"] = @[
+        @{@"name": @"key_w", @"keycode": @(GLFW_KEY_W)},
+        @{@"name": @"key_a", @"keycode": @(GLFW_KEY_A)},
+        @{@"name": @"key_s", @"keycode": @(GLFW_KEY_S)},
+        @{@"name": @"key_d", @"keycode": @(GLFW_KEY_D)},
+        @{@"name": @"key_space", @"keycode": @(GLFW_KEY_SPACE)},
+        @{@"name": @"key_shift", @"keycode": @(GLFW_KEY_LEFT_SHIFT)},
+        @{@"name": @"key_ctrl", @"keycode": @(GLFW_KEY_LEFT_CONTROL)},
+        @{@"name": @"key_e", @"keycode": @(GLFW_KEY_E)},
+        @{@"name": @"key_q", @"keycode": @(GLFW_KEY_Q)},
+        @{@"name": @"key_1", @"keycode": @(GLFW_KEY_1)},
+        @{@"name": @"key_2", @"keycode": @(GLFW_KEY_2)},
+        @{@"name": @"key_3", @"keycode": @(GLFW_KEY_3)},
+        @{@"name": @"key_4", @"keycode": @(GLFW_KEY_4)},
+        @{@"name": @"key_5", @"keycode": @(GLFW_KEY_5)},
+        @{@"name": @"key_6", @"keycode": @(GLFW_KEY_6)},
+        @{@"name": @"key_7", @"keycode": @(GLFW_KEY_7)},
+        @{@"name": @"key_8", @"keycode": @(GLFW_KEY_8)},
+        @{@"name": @"key_9", @"keycode": @(GLFW_KEY_9)},
+        @{@"name": @"key_tab", @"keycode": @(GLFW_KEY_TAB)},
+        @{@"name": @"key_esc", @"keycode": @(GLFW_KEY_ESCAPE)},
+        @{@"name": @"key_f", @"keycode": @(GLFW_KEY_F)},
+        @{@"name": @"key_enter", @"keycode": @(GLFW_KEY_ENTER)},
+    ];
+
+    dict[@"mKeyboardMenuMappingList"] = @[
+        @{@"name": @"key_w", @"keycode": @(GLFW_KEY_DPAD_UP)},
+        @{@"name": @"key_s", @"keycode": @(GLFW_KEY_DPAD_DOWN)},
+        @{@"name": @"key_a", @"keycode": @(GLFW_KEY_DPAD_LEFT)},
+        @{@"name": @"key_d", @"keycode": @(GLFW_KEY_DPAD_RIGHT)},
+        @{@"name": @"key_enter", @"keycode": @(GLFW_KEY_ENTER)},
+        @{@"name": @"key_esc", @"keycode": @(GLFW_KEY_ESCAPE)},
+        @{@"name": @"key_space", @"keycode": @(GLFW_KEY_SPACE)},
+        @{@"name": @"key_tab", @"keycode": @(GLFW_KEY_TAB)},
+    ];
+
+    dict[@"mMouseGameMappingList"] = @[
+        @{@"name": @"mouse_left", @"keycode": @(SPECIALBTN_MOUSEPRI)},
+        @{@"name": @"mouse_right", @"keycode": @(SPECIALBTN_MOUSESEC)},
+        @{@"name": @"mouse_middle", @"keycode": @(SPECIALBTN_MOUSEMID)},
+        @{@"name": @"mouse_scroll_up", @"keycode": @(SPECIALBTN_SCROLLUP)},
+        @{@"name": @"mouse_scroll_down", @"keycode": @(SPECIALBTN_SCROLLDOWN)},
+    ];
+
+    dict[@"mMouseMenuMappingList"] = @[
+        @{@"name": @"mouse_left", @"keycode": @(SPECIALBTN_MOUSEPRI)},
+        @{@"name": @"mouse_right", @"keycode": @(SPECIALBTN_MOUSESEC)},
+        @{@"name": @"mouse_scroll_up", @"keycode": @(SPECIALBTN_SCROLLUP)},
+        @{@"name": @"mouse_scroll_down", @"keycode": @(SPECIALBTN_SCROLLDOWN)},
+    ];
+
     NSOutputStream *os = [[NSOutputStream alloc] initToFileAtPath:gamepadPath append:NO];
     [os open];
     [NSJSONSerialization writeJSONObject:dict toStream:os options:NSJSONWritingPrettyPrinted error:nil];
