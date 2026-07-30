@@ -76,7 +76,9 @@ public class BindingConfig extends Task {
 
             String src = "modules/lwjgl/" + it + "/src";
 
-            templates.add(src + "/templates/kotlin");
+            if (Files.isDirectory(Paths.get(src + "/templates/kotlin"))) {
+                templates.add(src + "/templates/kotlin");
+            }
             sources.add(src + "/generated/java");
             if (Files.isDirectory(Paths.get(src + "/main/java"))) {
                 sources.add(src + "/main/java");
