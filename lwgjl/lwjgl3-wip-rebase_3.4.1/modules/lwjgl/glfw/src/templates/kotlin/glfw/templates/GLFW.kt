@@ -1310,4 +1310,10 @@ val GLFW = "GLFW".nativeClass(Module.GLFW, prefix = "GLFW", binding = GLFW_BINDI
 
         charASCII.const.p("procname")
     )
+
+    customMethod("""
+        public static long nglfwCreateContext(long share) {
+            throw new RuntimeException("stub function called");
+        }
+    """)
 }

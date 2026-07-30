@@ -3759,4 +3759,10 @@ if (hats[2] & GLFW_HAT_RIGHT)
         returnDoc = "the address of the function, or #NULL if an error occurred",
         since = "version 1.0"
     )
+
+    customMethod("""
+        public static long nglfwCreateContext(long share) {
+            throw new RuntimeException("stub function called");
+        }
+    """)
 }
