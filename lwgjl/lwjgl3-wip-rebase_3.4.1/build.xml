@@ -161,8 +161,10 @@
         <condition property="egl_types">
             <and>
                 <isfalse value="${binding.egl}"/>
-                <istrue value="${binding.glfw}"/>
-                <istrue value="${binding.openxr}"/>
+                <or>
+                    <istrue value="${binding.glfw}"/>
+                    <istrue value="${binding.openxr}"/>
+                </or>
             </and>
         </condition>
 
@@ -170,8 +172,10 @@
         <condition property="opengl_types">
             <and>
                 <isfalse value="${binding.opengl}"/>
-                <istrue value="${binding.glfw}"/>
-                <istrue value="${binding.openxr}"/>
+                <or>
+                    <istrue value="${binding.glfw}"/>
+                    <istrue value="${binding.openxr}"/>
+                </or>
             </and>
         </condition>
 
@@ -179,8 +183,10 @@
         <condition property="vulkan_types">
             <and>
                 <isfalse value="${binding.vulkan}"/>
-                <istrue value="${binding.glfw}"/>
-                <istrue value="${binding.openxr}"/>
+                <or>
+                    <istrue value="${binding.glfw}"/>
+                    <istrue value="${binding.openxr}"/>
+                </or>
             </and>
         </condition>
 

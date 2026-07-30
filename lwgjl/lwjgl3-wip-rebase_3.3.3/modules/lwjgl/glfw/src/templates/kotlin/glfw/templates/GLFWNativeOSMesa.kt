@@ -8,7 +8,7 @@ import org.lwjgl.generator.*
 import glfw.*
 import opengl.*
 
-val GLFWNativeOSMesa = "GLFWNativeOSMesa".nativeClass(Module.GLFW, prefix = "GLFW", binding = GLFW_BINDING_DELEGATE) {
+val GLFWNativeOSMesa = "GLFWNativeOSMesa".dependsOn(Module.OPENGL)?.nativeClass(Module.GLFW, prefix = "GLFW", binding = GLFW_BINDING_DELEGATE) {
     javaImport(
         "javax.annotation.*",
         "org.lwjgl.opengl.GL",

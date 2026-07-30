@@ -8,7 +8,7 @@ import egl.*
 import org.lwjgl.generator.*
 import glfw.*
 
-val GLFWNativeEGL = "GLFWNativeEGL".nativeClass(Module.GLFW, nativeSubPath = "egl", prefix = "GLFW", binding = GLFW_BINDING_DELEGATE) {
+val GLFWNativeEGL = "GLFWNativeEGL".dependsOn(Module.EGL)?.nativeClass(Module.GLFW, nativeSubPath = "egl", prefix = "GLFW", binding = GLFW_BINDING_DELEGATE) {
     javaImport(
         "org.jspecify.annotations.*",
         "static org.lwjgl.system.MemoryUtil.*"
