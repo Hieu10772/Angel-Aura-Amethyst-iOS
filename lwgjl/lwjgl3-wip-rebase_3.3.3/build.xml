@@ -503,7 +503,9 @@
             <compileBinding binding="lz4"/>
             <compileBinding binding="meow"/>
             <compileBinding binding="meshoptimizer"/>
-            <compileBinding binding="nanovg"/>
+            <compileBinding binding="nanovg">
+                <exclude name="org/lwjgl/nanovg/NanoVGBGFX.java" unless:true="${binding.bgfx}"/>
+            </compileBinding>
             <compileBinding binding="nfd"/>
             <compileBinding binding="nuklear"/>
             <compileBinding binding="odbc"/>
