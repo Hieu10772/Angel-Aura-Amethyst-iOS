@@ -55,6 +55,13 @@ public final class Library {
             );
         }
 
+        // loadSystem MUST run FIRST so that JNI symbols (e.g. LibFFI.FFI_TYPE_DOUBLE)
+        // are already registered when the native executable is loaded below.
+        // Failure to do so triggers eager class init on JDK 25+ that resolves all
+        // native methods during System.load — if liblwjgl.dylib isn't loaded first,
+        // GLFWErrorCallbackI.<clinit> → LibFFI.<clinit> → FFI_TYPE_DOUBLE() crashes
+        // with UnsatisfiedLinkError before liblwjgl.dylib ever gets loaded.
+        loadSystem("org.lwjgl", JNI_LIBRARY_NAME);
         try {
             // pojavexec is used to bridge GLFW with Android/iOS and loading vulkan driver for Android.
             if (Platform.get() == Platform.MACOSX) {
@@ -65,7 +72,6 @@ public final class Library {
         } catch (UnsatisfiedLinkError e) {
             e.printStackTrace();
         }
-        loadSystem("org.lwjgl", JNI_LIBRARY_NAME);
     }
 
     private Library() {}

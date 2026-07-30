@@ -229,7 +229,7 @@ ifndef SDKPATH
 $(error You need to specify SDKPATH to the path of iPhoneOS.sdk. The SDK version should be 14.0 or newer.)
 endif
 
-all: clean native java jre assets payload package dsym
+all: clean lwgjl native java jre assets payload package dsym
 
 help:
 	echo 'Makefile to compile Angel Aura Amethyst'
@@ -240,6 +240,7 @@ help:
 	echo '    make all                            Builds the entire app'
 	echo '    make native                         Builds the native app'
 	echo '    make java                           Builds the Java app'
+	echo '    make lwgjl                          Builds LWGJL 3.3.3 and 3.4.1 from source'
 	echo '    make jre                            Downloads/unpacks the iOS JREs'
 	echo '    make assets                         Compiles Assets.xcassets'
 	echo '    make payload                        Makes Payload/AngelAuraAmethyst.app'
@@ -341,7 +342,26 @@ assets:
 	fi
 	echo '[Amethyst v$(VERSION)] assets - end'
 
-payload: native dep_mg java jre assets
+lwgjl:
+	echo '[Amethyst v$(VERSION)] lwgjl - start'
+	@set -e; \
+	LWJGL33_DIR="$(SOURCEDIR)/lwgjl/lwjgl3-wip-rebase_3.3.3"; \
+	if [ ! -f "$$LWJGL33_DIR/bin/out/liblwjgl.dylib" ]; then \
+		echo "Building LWGJL 3.3.3..."; \
+		cd "$$LWJGL33_DIR" && export JAVA_HOME="$(JAVA_HOME)" && ant -Dplatform.macos=true -Dbinding.assimp=false -Dbinding.bgfx=false -Dbinding.cuda=false -Dbinding.egl=false -Dbinding.fmod=false -Dbinding.harfbuzz=false -Dbinding.hwloc=false -Dbinding.jawt=false -Dbinding.jemalloc=false -Dbinding.ktx=false -Dbinding.libdivide=false -Dbinding.llvm=false -Dbinding.lmdb=false -Dbinding.lz4=false -Dbinding.meow=false -Dbinding.meshoptimizer=false -Dbinding.nfd=false -Dbinding.nuklear=false -Dbinding.odbc=false -Dbinding.opengles=false -Dbinding.opencl=false -Dbinding.openvr=false -Dbinding.openxr=false -Dbinding.opus=false -Dbinding.par=false -Dbinding.remotery=false -Dbinding.renderdoc=false -Dbinding.rpmalloc=false -Dbinding.vulkan=true -Dbinding.vma=true -Dbinding.spvc=true -Dbinding.shaderc=true -Dbinding.sse=false -Dbinding.spng=false -Dbinding.tinyexr=false -Dbinding.tinyfd=true -Dbinding.tootle=false -Dbinding.xxhash=false -Dbinding.yoga=false -Dbinding.zstd=false -Dbinding.sdl=false -Dbuild.type=release/3.3.3 -Djavadoc.skip=true -Dnashorn.args="--no-deprecation-warning" compile compile-native release || exit 1; \
+	fi; \
+	echo "Copying 3.3.3 JARs to libs/lwjgl..."; \
+	find "$$LWJGL33_DIR/bin/RELEASE" -name '*.jar' ! -name '*-natives-*' ! -name '*-sources.jar' -exec cp {} "$(SOURCEDIR)/JavaApp/libs/lwjgl/" \; ; \
+	LWJGL41_DIR="$(SOURCEDIR)/lwgjl/lwjgl3-wip-rebase_3.4.1"; \
+	if [ ! -f "$$LWJGL41_DIR/bin/out/liblwjgl.dylib" ]; then \
+		echo "Building LWGJL 3.4.1..."; \
+		cd "$$LWJGL41_DIR" && export JAVA_HOME="$(JAVA_HOME)" && cp bin/libs/native/macos/arm64/org/lwjgl/libffi.a bin/libs/native/macos/x64/org/lwjgl/libffi.a 2>/dev/null && ant -Dplatform.macos=true -Dbinding.assimp=false -Dbinding.bgfx=false -Dbinding.cuda=false -Dbinding.egl=false -Dbinding.fmod=false -Dbinding.harfbuzz=false -Dbinding.hwloc=false -Dbinding.jawt=false -Dbinding.jemalloc=false -Dbinding.ktx=false -Dbinding.libdivide=false -Dbinding.llvm=false -Dbinding.lmdb=false -Dbinding.lz4=false -Dbinding.meow=false -Dbinding.meshoptimizer=false -Dbinding.nfd=false -Dbinding.nuklear=false -Dbinding.odbc=false -Dbinding.opengles=false -Dbinding.opencl=false -Dbinding.openvr=false -Dbinding.openxr=false -Dbinding.opus=false -Dbinding.par=false -Dbinding.remotery=false -Dbinding.renderdoc=false -Dbinding.rpmalloc=false -Dbinding.vulkan=true -Dbinding.vma=true -Dbinding.spvc=true -Dbinding.shaderc=true -Dbinding.sse=false -Dbinding.spng=false -Dbinding.tinyexr=false -Dbinding.tinyfd=true -Dbinding.tootle=false -Dbinding.xxhash=false -Dbinding.yoga=false -Dbinding.zstd=false -Dbinding.sdl=false -Dbuild.type=release/3.4.1 -Djavadoc.skip=true -Dnashorn.args="--no-deprecation-warning" compile compile-native release || exit 1; \
+	fi; \
+	echo "Copying 3.4.1 JARs to libs/lwjgl41..."; \
+	find "$$LWJGL41_DIR/bin/RELEASE" -name '*.jar' ! -name '*-natives-*' ! -name '*-sources.jar' -exec cp {} "$(SOURCEDIR)/JavaApp/libs/lwjgl41/" \; ; \
+	echo '[Amethyst v$(VERSION)] lwgjl - end'
+
+payload: native dep_mg lwgjl java jre assets
 	echo '[Amethyst v$(VERSION)] payload - start'
 	$(call METHOD_DIRCHECK,$(WORKINGDIR)/AngelAuraAmethyst.app/libs)
 	$(call METHOD_DIRCHECK,$(WORKINGDIR)/AngelAuraAmethyst.app/libs_caciocavallo)
@@ -354,6 +374,23 @@ payload: native dep_mg java jre assets
 	mkdir -p $(WORKINGDIR)/AngelAuraAmethyst.app/libs/lwjgl33 $(WORKINGDIR)/AngelAuraAmethyst.app/libs/lwjgl41
 	cp $(SOURCEDIR)/JavaApp/build/lwjgl-3.3.3.jar $(WORKINGDIR)/AngelAuraAmethyst.app/libs/lwjgl33/lwjgl.jar || exit 1
 	cp $(SOURCEDIR)/JavaApp/build/lwjgl-3.4.1.jar $(WORKINGDIR)/AngelAuraAmethyst.app/libs/lwjgl41/lwjgl.jar || exit 1
+	mkdir -p $(WORKINGDIR)/AngelAuraAmethyst.app/libs/lwjgl33_natives $(WORKINGDIR)/AngelAuraAmethyst.app/libs/lwjgl41_natives
+	cp $(SOURCEDIR)/lwgjl/lwjgl3-wip-rebase_3.3.3/bin/out/*.dylib $(WORKINGDIR)/AngelAuraAmethyst.app/libs/lwjgl33_natives/ || exit 1
+	cp $(SOURCEDIR)/lwgjl/lwjgl3-wip-rebase_3.4.1/bin/out/*.dylib $(WORKINGDIR)/AngelAuraAmethyst.app/libs/lwjgl41_natives/ || exit 1
+	# LWJGL's libopenal.dylib links ApplicationServices.framework (macOS-only).
+	# Replace with iOS-compatible openal-soft build so LWJGL finds it at the
+	# expected path but loads a dylib that works on iOS.
+	cp $(SOURCEDIR)/Natives/resources/Frameworks/libopenal.dylib \
+	   $(WORKINGDIR)/AngelAuraAmethyst.app/libs/lwjgl33_natives/libopenal.dylib
+	cp $(SOURCEDIR)/Natives/resources/Frameworks/libopenal.dylib \
+	   $(WORKINGDIR)/AngelAuraAmethyst.app/libs/lwjgl41_natives/libopenal.dylib
+	# LWJGL's libfreetype.dylib links CoreGraphics.framework (macOS-only).
+	# Replace with the JDK's freetype build which is statically compiled
+	# against iOS and doesn't need macOS frameworks.
+	cp $(SOURCEDIR)/depends/java-25-openjdk/lib/libfreetype.dylib \
+	   $(WORKINGDIR)/AngelAuraAmethyst.app/libs/lwjgl33_natives/libfreetype.dylib
+	cp $(SOURCEDIR)/depends/java-25-openjdk/lib/libfreetype.dylib \
+	   $(WORKINGDIR)/AngelAuraAmethyst.app/libs/lwjgl41_natives/libfreetype.dylib
 	cp -R $(SOURCEDIR)/JavaApp/libs/caciocavallo/* $(WORKINGDIR)/AngelAuraAmethyst.app/libs_caciocavallo || exit 1
 	cp -R $(SOURCEDIR)/JavaApp/libs/caciocavallo17/* $(WORKINGDIR)/AngelAuraAmethyst.app/libs_caciocavallo17 || exit 1
 	$(call METHOD_DIRCHECK,$(OUTPUTDIR)/Payload)
