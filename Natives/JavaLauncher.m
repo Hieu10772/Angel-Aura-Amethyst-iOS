@@ -47,6 +47,43 @@ void init_loadDefaultEnv() {
     // Silent Caciocavallo NPE error in locating Android-only lib
     setenv("LD_LIBRARY_PATH", "", 1);
 
+    // Point fontconfig to the app's bundled config directory so X11FontManager
+    // doesn't search the macOS Fontconfig.framework path (which doesn't exist on iOS).
+    NSString *fcDir = [NSString stringWithFormat:@"%s/fontconfig", getenv("POJAV_HOME")];
+    [fm createDirectoryAtPath:[fcDir stringByAppendingPathComponent:@"conf.d"]
+        withIntermediateDirectories:YES attributes:nil error:nil];
+    // Create a minimal fonts.conf so fontconfig initializes without errors
+    NSString *fcConfPath = [fcDir stringByAppendingPathComponent:@"fonts.conf"];
+    if (![fm fileExistsAtPath:fcConfPath]) {
+        NSString *fcConf = @"<?xml version=\"1.0\"?>\n"
+            @"<!DOCTYPE fontconfig SYSTEM \"fonts.dtd\">\n"
+            @"<fontconfig>\n"
+            @"  <dir>/System/Library/Fonts</dir>\n"
+            @"  <dir>/System/Library/Fonts/Cache</dir>\n"
+            @"  <cacheid>/System/Library/Caches/com.apple.fonts</cacheid>\n"
+            @"  <match target=\"pattern\">\n"
+            @"    <test name=\"family\"><string>sans-serif</string></test>\n"
+            @"    <edit name=\"family\" mode=\"append\" binding=\"same\">\n"
+            @"      <string>Helvetica</string>\n"
+            @"    </edit>\n"
+            @"  </match>\n"
+            @"  <match target=\"pattern\">\n"
+            @"    <test name=\"family\"><string>serif</string></test>\n"
+            @"    <edit name=\"family\" mode=\"append\" binding=\"same\">\n"
+            @"      <string>Times New Roman</string>\n"
+            @"    </edit>\n"
+            @"  </match>\n"
+            @"  <match target=\"pattern\">\n"
+            @"    <test name=\"family\"><string>monospace</string></test>\n"
+            @"    <edit name=\"family\" mode=\"append\" binding=\"same\">\n"
+            @"      <string>Menlo</string>\n"
+            @"    </edit>\n"
+            @"  </match>\n"
+            @"</fontconfig>\n";
+        [fcConf writeToFile:fcConfPath atomically:YES encoding:NSUTF8StringEncoding error:nil];
+    }
+    setenv("FONTCONFIG_PATH", fcDir.UTF8String, 1);
+
     // Ignore mipmap for performance(?) seems does not affect iOS
     //setenv("LIBGL_MIPMAP", "3", 1);
 

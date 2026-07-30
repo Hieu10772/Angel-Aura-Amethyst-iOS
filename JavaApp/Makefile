@@ -32,7 +32,7 @@ $(CLASSES): $(OUTPUTDIR)/%.class: $(SOURCEDIR)/%.java
 	@mkdir -p $(dir $@)
 	@echo "Compiling $<"
 	@$(BOOTJDK)/javac $(JCFLAGS) -d $(OUTPUTDIR)/classes $<
-	@cp $(@:$(OUTPUTDIR)/$(TARGET)/%.class=$(OUTPUTDIR)/classes/%*.class) $(dir $@)/
+	@find "$(OUTPUTDIR)/classes/$(dir $(subst $(OUTPUTDIR)/$(TARGET)/,,$@))" -maxdepth 1 -name "$(notdir $(basename $@))*" -exec cp {} "$(dir $@)" \;
 
 $(OUTPUTDIR)/launcher.jar: $(CLASSES)
 	@set -e

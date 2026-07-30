@@ -3,6 +3,9 @@ package net.kdt.pojavlaunch;
 import java.beans.Beans;
 import java.io.*;
 import java.lang.reflect.Field;
+import java.net.URL;
+import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
 import java.util.*;
 import java.util.concurrent.*;
 
@@ -34,10 +37,31 @@ public class PojavLauncher {
             //Tools.showError(th);
         }
 
+        // Ensure JNA uses a writable directory with valid code signing support
+        String pojavHome = System.getenv("POJAV_HOME");
+        if (pojavHome != null) {
+            String jnaTmpDir = pojavHome + "/jna_tmp";
+            new File(jnaTmpDir).mkdirs();
+            System.setProperty("jna.tmpdir", jnaTmpDir);
+            System.setProperty("jna.nosys", "true");
+            System.setProperty("jna.boot.library.path", jnaTmpDir);
+        }
+
+        // Skip JNA's internal class-initialization that tries to dlopen dyld
+        // shared-cache images (non-existent on iOS), preventing spurious
+        // UnsatisfiedLinkError during Native.<clinit>
+        System.setProperty("jna.nounpack", "true");
+        System.setProperty("jna.noclassinit", "true");
+
         Thread.currentThread().setUncaughtExceptionHandler(new Thread.UncaughtExceptionHandler() {
 
             public void uncaughtException(Thread t, Throwable th) {
+                System.err.println("===== UNCAUGHT EXCEPTION on thread: " + t.getName() + " =====");
                 th.printStackTrace();
+                System.err.println("===== END UNCAUGHT EXCEPTION =====");
+                System.err.flush();
+                System.out.flush();
+                try { Thread.sleep(500); } catch (InterruptedException e) {}
                 System.exit(1);
             }
         });
@@ -51,7 +75,52 @@ public class PojavLauncher {
         if (runJar != null) {
             UIKit.callback_JavaGUIViewController_launchJarFile(runJar, new String[0]);
         } else {
-            launchMinecraft(args);
+            try {
+                launchMinecraft(args);
+            } catch (Throwable th) {
+                System.err.println("===== FATAL ERROR in launchMinecraft =====");
+                th.printStackTrace();
+                System.err.println("===== END FATAL ERROR =====");
+                System.exit(1);
+            }
+        }
+    }
+
+    private static String downloadLog4jConfig(JMinecraftVersionList.LoggingConfig logging) {
+        if (logging == null || logging.client == null || logging.client.file == null) return null;
+        String fileId = logging.client.file.id;
+        String fileUrl = logging.client.file.url;
+        if (fileId == null) return null;
+
+        // Known bundled configs
+        if ("client-1.12.xml".equals(fileId)) {
+            return Tools.DIR_BUNDLE + "/log4j-rce-patch-1.12.xml";
+        }
+        if ("client-1.7.xml".equals(fileId)) {
+            return Tools.DIR_BUNDLE + "/log4j-rce-patch-1.7.xml";
+        }
+
+        // For unknown config IDs, try to download from the provided URL
+        if (fileUrl == null) return null;
+
+        String localPath = Tools.DIR_GAME_NEW + "/log4j/" + fileId;
+        File localFile = new File(localPath);
+        if (localFile.exists()) {
+            return localPath;
+        }
+
+        try {
+            System.out.println("Downloading log4j config: " + fileId + " from " + fileUrl);
+            localFile.getParentFile().mkdirs();
+            URL url = new URL(fileUrl);
+            try (InputStream in = url.openStream()) {
+                Files.copy(in, localFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
+            }
+            System.out.println("Downloaded log4j config to: " + localPath);
+            return localPath;
+        } catch (Exception e) {
+            System.err.println("Failed to download log4j config: " + fileId + " - " + e.getMessage());
+            return null;
         }
     }
 
@@ -90,16 +159,15 @@ public class PojavLauncher {
         MinecraftAccount account = MinecraftAccount.load(args[0]);
         JMinecraftVersionList.Version version = Tools.getVersionInfo(args[1]);
         System.out.println("Launching Minecraft " + (version != null ? version.id : "null"));
-        String configPath;
-        if (version.logging != null) {
-            if (version.logging.client.file.id.equals("client-1.12.xml")) {
-                configPath = Tools.DIR_BUNDLE + "/log4j-rce-patch-1.12.xml";
-            } else if (version.logging.client.file.id.equals("client-1.7.xml")) {
-                configPath = Tools.DIR_BUNDLE + "/log4j-rce-patch-1.7.xml";
-            } else {
-                configPath = Tools.DIR_GAME_NEW + "/" + version.logging.client.file.id;
-            }
+        String configPath = downloadLog4jConfig(version != null ? version.logging : null);
+        if (configPath != null) {
             System.setProperty("log4j.configurationFile", configPath);
+        } else if (version != null && version.logging != null && version.logging.client != null) {
+            // Set the argument directly if available, instead of log4j.configurationFile
+            String log4jArg = version.logging.client.argument;
+            if (log4jArg != null) {
+                System.out.println("Using log4j argument: " + log4jArg);
+            }
         }
 
         Tools.launchMinecraft(account, version);

@@ -60,6 +60,9 @@ void hooked_exit(int code) {
         orig_exit(0);
         return;
     }
+    // Give the stdout/stderr pipe read thread time to flush so we capture
+    // any Java exception stack traces logged right before System.exit().
+    usleep(500*1000);
     handle_fatal_exit(code);
 
     orig_exit(code);
