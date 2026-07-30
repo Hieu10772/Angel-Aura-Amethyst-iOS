@@ -419,6 +419,8 @@
 
             <local name="hasMain"/>
             <available file="${module.lwjgl}/@{binding}/src/main/java" type="dir" property="hasMain"/>
+            <local name="hasGenerated"/>
+            <available file="${module.lwjgl}/@{binding}/src/generated/java" type="dir" property="hasGenerated"/>
 
             <mkdir dir="${bin.lwjgl}/@{binding}"/>
             <lwjgl.javac destdir="${bin.lwjgl}/@{binding}" taskname="javac: @{binding}" if:true="${binding.@{binding}}">
@@ -429,7 +431,7 @@
 
                 <src>
                     <pathelement path="${module.lwjgl}/@{binding}/src/main/java" if:set="hasMain"/>
-                    <pathelement path="${module.lwjgl}/@{binding}/src/generated/java"/>
+                    <pathelement path="${module.lwjgl}/@{binding}/src/generated/java" if:set="hasGenerated"/>
                 </src>
                 <include name="**"/>
 
