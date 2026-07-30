@@ -481,4 +481,4 @@ clean:
 
 		
 
-.PHONY: all clean check native java jre package dsym deploy help
+.PHONY: all clean check native java jre lwgjl dep_mg assets payload package dsym deploy help codesign
