@@ -282,7 +282,11 @@ native: dep_mg
 
 java:
 	echo '[Amethyst v$(VERSION)] java - start'
-	$(MAKE) -C JavaApp -j$(JOBS) BOOTJDK=$(BOOTJDK)
+	# Each .java file compiles in its own javac VM (JavaApp Makefile), so keep
+	# parallelism low: running 10+ javac VMs concurrently with the parallel
+	# native/lwgjl/dep_mg jobs exhausts CI runner memory and crashes javac
+	# (SIGABRT in _platform_memmove).
+	$(MAKE) -C JavaApp -j4 BOOTJDK=$(BOOTJDK)
 	echo '[Amethyst v$(VERSION)] java - end'
 
 jre: native
