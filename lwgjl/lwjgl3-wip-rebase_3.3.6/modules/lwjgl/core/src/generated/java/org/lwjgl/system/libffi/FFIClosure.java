@@ -43,15 +43,12 @@ public class FFIClosure extends Struct<FFIClosure> implements NativeResource {
         USER_DATA;
 
     static {
-        // LWJGL3-wip-rebase natives are built with the pre-3.4 libffi closure
-        // layout (no trampoline union), while the generated offsets() wrapper
-        // reports the 3.4.x layout (SIZEOF=56, USER_DATA=48). Hardcode the
-        // layout the shipped libffi actually uses to keep Callback free() in sync.
         SIZEOF = 40;
         ALIGNOF = 8;
-        CIF = 16;
-        FUN = 24;
-        USER_DATA = 32;
+
+            CIF = 16;
+            FUN = 24;
+            USER_DATA = 32;
     }
 
     protected FFIClosure(long address, @Nullable ByteBuffer container) {

@@ -50,5 +50,11 @@ ENABLE_WARNINGS()""")
     ffi_cif.p("cif", "a pointer to an {@code ffi_cif} structure")
     "void (*)(ffi_cif*,void*,void**,void*)".handle("fun", "a pointer to a function")
     opaque_p("user_data", "a pointer to user-specified data")
+
+    // The iOS natives are built with a pre-3.4 libffi closure layout (trampoline table exec: cif@16, fun@24,
+    // user_data@32, size 40), while the generated offsets() wrapper reports the 3.4.x trampoline-union layout
+    // (SIZEOF=56, USER_DATA=48). Hardcode the layout the shipped libffi actually uses so Callback free() does
+    // not read a garbage user_data pointer (DeleteGlobalRef(NULL) NPE).
+    fixedLayout(40, 8, 16, 24, 32)
 }
 val FFI_CLOSURE_FUN = "FFI_CLOSURE_FUN".handle

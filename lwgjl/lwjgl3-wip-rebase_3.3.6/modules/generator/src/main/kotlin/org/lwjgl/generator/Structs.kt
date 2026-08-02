@@ -193,6 +193,12 @@ class Struct(
     private var pack: String? = null
     // TODO: add alignas support to non-struct members if necessary
     private var alignas: String? = null
+    /**
+     * When set, the generated static initializer uses these hardcoded offsets instead of calling the native
+     * [SIZEOF, ALIGNOF, member offsets...] function. Used when the native layout cannot be queried reliably
+     * (e.g. mismatched libffi headers vs the linked libffi closure layout).
+     */
+    private var fixedLayout: IntArray? = null
 
     private val customMethods = ArrayList<String>()
     private val customMethodsBuffer = ArrayList<String>()
@@ -227,6 +233,7 @@ class Struct(
         copy.documentation = documentation
 
         copy.static = static
+        copy.fixedLayout = fixedLayout
         copy.alignas = alignas
         copy.pack = pack
 
@@ -263,6 +270,10 @@ class Struct(
 
     fun static(expression: String) {
         static = expression
+    }
+
+    fun fixedLayout(vararg offsets: Int) {
+        fixedLayout = offsets
     }
 
     fun pack(expression: String) {
@@ -968,25 +979,37 @@ $indentation}"""
                 // Member offset initialization
 
                 if (nativeLayout) {
-                    if (module.library != null) {
+                    val fixed = fixedLayout
+                    if (fixed != null) {
                         print(
-                        """
+                            """
+        SIZEOF = ${fixed[0]};
+        ALIGNOF = ${fixed[1]};
+
+"""
+                        )
+                        generateOffsetInit(true, members, indentation = "$t$t$t", fixed = fixed.drop(2).toIntArray())
+                    } else {
+                        if (module.library != null) {
+                            print(
+                            """
         ${module.library.expression(module)}""")
-                    }
-                    print(
-                        """
+                        }
+                        print(
+                            """
         try (MemoryStack stack = stackPush()) {
             IntBuffer offsets = stack.mallocInt(${memberCount + 1});
             SIZEOF = offsets(memAddress(offsets));
 
 """
-                    )
-                    generateOffsetInit(true, members, indentation = "$t$t$t")
-                    println(
-                        """
+                        )
+                        generateOffsetInit(true, members, indentation = "$t$t$t")
+                        println(
+                            """
             ALIGNOF = offsets.get($memberCount);
         }"""
-                    )
+                        )
+                    }
                 } else {
                     print(
                         """
@@ -1029,7 +1052,7 @@ $indentation}"""
                 )
             }
 
-            if (nativeLayout)
+            if (nativeLayout && fixedLayout == null)
                 println(
                     """
     private static native int offsets(long buffer);"""
@@ -1463,21 +1486,28 @@ ${validations.joinToString("\n")}
         members: List<StructMember>,
         indentation: String = "$t$t",
         parentField: String = "",
-        offset: Int = 0
+        offset: Int = 0,
+        fixed: IntArray? = null
     ): Int {
         var index = offset
         members.forEach {
             if (it.name === ANONYMOUS && it.isNestedStruct) {
-                index = generateOffsetInit(nativeLayout, (it.nativeType as StructType).definition.members, indentation, parentField, index + 1) // recursion
+                index = generateOffsetInit(nativeLayout, (it.nativeType as StructType).definition.members, indentation, parentField, index + 1, fixed) // recursion
             } else if (it is StructMemberPadding) {
                 index++
             } else if (it.bits == -1) {
                 val field = it.offsetField(parentField)
-                println("$indentation$field = ${if (nativeLayout) "offsets.get" else "layout.offsetof"}(${index++});")
+                val expr = when {
+                    fixed != null       -> fixed[index].toString()
+                    nativeLayout        -> "offsets.get($index)"
+                    else                -> "layout.offsetof($index)"
+                }
+                println("$indentation$field = $expr;")
+                index++
 
                 // Output nested fields
                 if (it.isNestedStructDefinition)
-                    index = generateOffsetInit(nativeLayout, (it.nativeType as StructType).definition.members, "$indentation$t", field, index) // recursion
+                    index = generateOffsetInit(nativeLayout, (it.nativeType as StructType).definition.members, "$indentation$t", field, index, fixed) // recursion
             }
         }
         return index
