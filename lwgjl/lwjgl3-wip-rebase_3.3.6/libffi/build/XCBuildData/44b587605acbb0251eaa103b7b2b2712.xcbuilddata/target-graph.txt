@@ -1,0 +1,2 @@
+Target dependency graph (1 target)
+Target 'libffi-iOS' in project 'libffi' (no dependencies)

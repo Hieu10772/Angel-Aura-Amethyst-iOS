@@ -22,6 +22,18 @@ entitlements.codesign.xml
 /amethyst-prebuilt-libraries/SDL/SDL3/build_ios/
 /lwgjl/*/bin/
 /lwgjl/*/.gradle/
-/lwgjl/*/libffi/build*/
 /lwgjl/*/.github/workflows/android/.gradle/
 /lwgjl/*/.github/workflows/android/build/
+
+# libffi configured build dirs are committed (CI needs them); ignore generated objects
+/lwgjl/*/libffi/build*/.libs/
+/lwgjl/*/libffi/build*/*.la
+/lwgjl/*/libffi/build*/src/*.o
+/lwgjl/*/libffi/build*/src/*.lo
+/lwgjl/*/libffi/build*/src/*/*.o
+/lwgjl/*/libffi/build*/src/*/*.lo
+/lwgjl/*/libffi/build*/*.dirstamp
+/lwgjl/*/libffi/build*/src/.dirstamp
+/lwgjl/*/libffi/build*/src/*/.dirstamp
+/lwgjl/*/libffi/build*/src/.deps/.dirstamp
+/lwgjl/*/libffi/build*/src/*/.deps/.dirstamp
