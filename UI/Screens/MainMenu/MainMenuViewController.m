@@ -69,7 +69,7 @@
 
 - (void)updateColors {
     ThemeManager *theme = ThemeManager.shared;
-    self.view.backgroundColor = theme.backgroundColor;
+    self.view.backgroundColor = theme.contentBackgroundColor;
     _titleLabel.textColor = theme.primaryTextColor;
     _versionLabel.textColor = theme.secondaryTextColor;
 }

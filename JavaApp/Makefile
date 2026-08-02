@@ -10,7 +10,7 @@ TARGETS := $(TARGETS:$(SOURCEDIR)/%=$(OUTPUTDIR)/%.jar)
 TARGETS += $(OUTPUTDIR)/lwjgl-3.3.3.jar $(OUTPUTDIR)/lwjgl-3.3.6.jar $(OUTPUTDIR)/lwjgl-3.4.1.jar $(OUTPUTDIR)/cacio-init-agent.jar
 
 # Add all jars to classpath and allow compiling with private API
-JCFLAGS := -cp "$(subst $() $(),:,$(wildcard $(SOURCEDIR)/*/):$(wildcard libs/*/*.jar))" -XDignore.symbol.file
+JCFLAGS := -cp "$(subst $() $(),:,$(wildcard $(SOURCEDIR)/*/):$(wildcard libs/*/*.jar):$(wildcard ../lwgjl/lwjgl3-wip-rebase_3.4.1/bin/libs/java/jspecify.jar))" -XDignore.symbol.file
 
 all: $(TARGETS)
 	
@@ -38,6 +38,8 @@ $(OUTPUTDIR)/launcher.jar: $(CLASSES)
 	@set -e
 	@echo "Creating $@"
 	@cp -r $(SOURCEDIR)/launcher/META-INF $(basename $@)/ 2>/dev/null || true
+	@mkdir -p $(basename $@)/lwjglfix
+	@unzip -o -p libs/lwjgl41/lwjgl.jar org/lwjgl/system/Library.class > $(basename $@)/lwjglfix/Library.class
 	@find $(basename $@) -name '*.class' -size 0 | grep -v '\$$' && { echo "Error: found empty class files"; exit 1; } || true
 	@$(BOOTJDK)/jar -cf $@ -C $(basename $@) .
 

@@ -111,7 +111,7 @@
 
 - (void)updateColors {
     ThemeManager *theme = ThemeManager.shared;
-    self.view.backgroundColor = theme.backgroundColor;
+    self.view.backgroundColor = theme.contentBackgroundColor;
     _searchBar.searchTextField.textColor = theme.primaryTextColor;
     _searchBar.tintColor = theme.accentColor;
     _emptyLabel.textColor = theme.secondaryTextColor;

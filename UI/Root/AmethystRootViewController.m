@@ -5,6 +5,7 @@
 #import "TransitionAnimator.h"
 #import "MainCoordinator.h"
 #import "LauncherPreferences.h"
+#import <AVFoundation/AVFoundation.h>
 
 @interface AmethystRootViewController () <RightPanelDelegate, TopBarDelegate>
 @property (nonatomic) TopBarView *topBar;
@@ -14,6 +15,9 @@
 @property (nonatomic) UIViewController *currentContentVC;
 @property (nonatomic) UIView *sidebarBorder;
 @property (nonatomic) UIImageView *backgroundImageView;
+@property (nonatomic) UIView *backgroundVideoView;
+@property (nonatomic) AVPlayerLayer *backgroundVideoLayer;
+@property (nonatomic) AVPlayer *backgroundVideoPlayer;
 @property (nonatomic) BOOL didInitialLayout;
 @end
 
@@ -36,6 +40,17 @@
     _backgroundImageView.clipsToBounds = YES;
     _backgroundImageView.hidden = YES;
     [self.view insertSubview:_backgroundImageView atIndex:0];
+
+    _backgroundVideoView = [[UIView alloc] init];
+    _backgroundVideoView.hidden = YES;
+    [self.view insertSubview:_backgroundVideoView atIndex:0];
+    _backgroundVideoLayer = [AVPlayerLayer layer];
+    _backgroundVideoLayer.videoGravity = AVLayerVideoGravityResizeAspectFill;
+    _backgroundVideoLayer.backgroundColor = UIColor.clearColor.CGColor;
+    [_backgroundVideoView.layer addSublayer:_backgroundVideoLayer];
+
+    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(backgroundVideoDidEnd:) name:AVPlayerItemDidPlayToEndTimeNotification object:nil];
+    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(backgroundVideoDidEnd:) name:UIApplicationDidBecomeActiveNotification object:nil];
 
     _sidebarVC = [[SidebarViewController alloc] init];
     _sidebarVC.delegate = self;
@@ -82,6 +97,8 @@
     _topBar.frame = CGRectMake(leftInset, topBarY, bounds.size.width - leftInset - rightInset, topBarHeight);
 
     _backgroundImageView.frame = bounds;
+    _backgroundVideoView.frame = bounds;
+    _backgroundVideoLayer.frame = _backgroundVideoView.bounds;
 
     CGFloat sidebarX = leftInset;
     _sidebarVC.view.frame = CGRectMake(sidebarX, contentTop, sidebarWidth, contentHeight);
@@ -118,11 +135,52 @@
     ThemeManager *theme = ThemeManager.shared;
     self.view.backgroundColor = theme.backgroundColor;
     _sidebarBorder.backgroundColor = theme.separatorColor;
-    if (theme.backgroundImage) {
+    if (theme.backgroundVideoURL) {
+        [self setupBackgroundVideo:theme.backgroundVideoURL];
+        _backgroundImageView.hidden = YES;
+        _backgroundVideoView.hidden = NO;
+    } else if (theme.backgroundImage) {
+        [self stopBackgroundVideo];
         _backgroundImageView.image = theme.blurredBackgroundImage ?: theme.backgroundImage;
         _backgroundImageView.hidden = NO;
+        _backgroundVideoView.hidden = YES;
     } else {
+        [self stopBackgroundVideo];
         _backgroundImageView.hidden = YES;
+        _backgroundVideoView.hidden = YES;
+    }
+}
+
+- (void)setupBackgroundVideo:(NSURL *)videoURL {
+    if (_backgroundVideoPlayer.currentItem && [_backgroundVideoPlayer.currentItem.asset isKindOfClass:[AVURLAsset class]]) {
+        AVURLAsset *asset = (AVURLAsset *)_backgroundVideoPlayer.currentItem.asset;
+        if ([asset.URL.path isEqualToString:videoURL.path]) {
+            [_backgroundVideoPlayer play];
+            return;
+        }
+    }
+    _backgroundVideoPlayer = [AVPlayer playerWithURL:videoURL];
+    _backgroundVideoPlayer.muted = YES;
+    _backgroundVideoPlayer.actionAtItemEnd = AVPlayerActionAtItemEndNone;
+    _backgroundVideoLayer.player = _backgroundVideoPlayer;
+    [_backgroundVideoPlayer play];
+}
+
+- (void)stopBackgroundVideo {
+    [_backgroundVideoPlayer pause];
+    _backgroundVideoLayer.player = nil;
+    _backgroundVideoPlayer = nil;
+}
+
+- (void)backgroundVideoDidEnd:(NSNotification *)notification {
+    if (notification.name == AVPlayerItemDidPlayToEndTimeNotification) {
+        AVPlayerItem *item = notification.object;
+        if (item != _backgroundVideoPlayer.currentItem) return;
+    }
+    if (_backgroundVideoPlayer && _backgroundVideoPlayer.currentItem) {
+        [_backgroundVideoPlayer seekToTime:kCMTimeZero toleranceBefore:kCMTimeZero toleranceAfter:kCMTimeZero completionHandler:^(BOOL finished) {
+            [_backgroundVideoPlayer play];
+        }];
     }
 }
 

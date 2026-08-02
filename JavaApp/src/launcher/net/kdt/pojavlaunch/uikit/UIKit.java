@@ -5,7 +5,6 @@ import java.lang.reflect.*;
 import java.util.jar.*;
 import net.kdt.pojavlaunch.utils.MCOptionUtils;
 import net.kdt.pojavlaunch.*;
-import org.lwjgl.glfw.*;
 
 public class UIKit {
     public static final int ACTION_DOWN = 0;
@@ -73,7 +72,20 @@ public class UIKit {
         String str = MCOptionUtils.get("guiScale");
         guiScale = (str == null ? 0 :Integer.parseInt(str));
 
-        int scale = Math.max(Math.min(GLFW.mGLFWWindowWidth / 320, GLFW.mGLFWWindowHeight / 240), 1);
+        // Window size comes from the glfw.windowSize property set at launch;
+        // do NOT read org.lwjgl.glfw.GLFW statics here — initializing LWJGL in
+        // the launcher's classloader conflicts with Fabric/Knot's separate
+        // classloader ("liblwjgl.dylib already loaded in another classloader").
+        int winW = 1280, winH = 720;
+        String sizeStr = System.getProperty("glfw.windowSize");
+        if (sizeStr != null) {
+            try {
+                String[] size = sizeStr.split("x");
+                winW = Integer.parseInt(size[0]);
+                winH = Integer.parseInt(size[1]);
+            } catch (Exception ignored) {}
+        }
+        int scale = Math.max(Math.min(winW / 320, winH / 240), 1);
         if(scale < guiScale || guiScale == 0){
             guiScale = scale;
         }

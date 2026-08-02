@@ -20,6 +20,8 @@
 #include "utils.h"
 #include "ZinkConfig.h"
 
+void aasdl_setMainReady(void);
+
 int clientAPI;
 __thread basic_render_window_t* currentBundle;
 
@@ -47,6 +49,8 @@ int pojavInit(BOOL useStackQueue) {
     clientAPI = GLFW_OPENGL_API;
     isInputReady = 1;
     isUseStackQueueCall = useStackQueue;
+    NSLog(@"[InputDiag] pojavInit: useStackQueue=%d (isInputReady set to 1)", useStackQueue);
+    aasdl_setMainReady();
     return JNI_TRUE;
 }
 

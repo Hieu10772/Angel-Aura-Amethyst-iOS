@@ -417,7 +417,7 @@
 
 - (void)updateColors {
     ThemeManager *theme = ThemeManager.shared;
-    self.view.backgroundColor = theme.backgroundColor;
+    self.view.backgroundColor = theme.contentBackgroundColor;
     if (@available(iOS 13.0, *)) {
         _searchBar.searchTextField.textColor = theme.primaryTextColor;
     }

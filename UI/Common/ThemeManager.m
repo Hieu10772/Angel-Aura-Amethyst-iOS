@@ -61,6 +61,11 @@ NSString * const ThemeDidChangeNotification = @"ThemeDidChangeNotification";
         _backgroundImage = [UIImage imageWithContentsOfFile:imgPath];
         [self processBackgroundBlur];
     }
+
+    NSString *videoPath = [defaults stringForKey:@"amethyst_bg_video"];
+    if (videoPath) {
+        _backgroundVideoURL = [NSURL fileURLWithPath:videoPath];
+    }
 }
 
 - (void)loadColorOverrideForKey:(NSString *)key into:(UIColor *__strong *)ptr {
@@ -75,9 +80,33 @@ NSString * const ThemeDidChangeNotification = @"ThemeDidChangeNotification";
 - (void)setBackgroundImage:(UIImage *)backgroundImage {
     _backgroundImage = backgroundImage;
     _blurredBackgroundImage = nil;
+    _backgroundVideoURL = nil;
+    [[NSUserDefaults standardUserDefaults] removeObjectForKey:@"amethyst_bg_video"];
     if (backgroundImage && _backgroundBlurIntensity > 0) {
         [self processBackgroundBlur];
     }
+    [self broadcastThemeChange];
+}
+
+- (void)setBackgroundVideoURL:(NSURL *)backgroundVideoURL {
+    _backgroundVideoURL = backgroundVideoURL;
+    _backgroundImage = nil;
+    _blurredBackgroundImage = nil;
+    [[NSUserDefaults standardUserDefaults] removeObjectForKey:@"amethyst_bg_image"];
+    if (backgroundVideoURL) {
+        [[NSUserDefaults standardUserDefaults] setObject:backgroundVideoURL.path forKey:@"amethyst_bg_video"];
+    } else {
+        [[NSUserDefaults standardUserDefaults] removeObjectForKey:@"amethyst_bg_video"];
+    }
+    [self broadcastThemeChange];
+}
+
+- (BOOL)hasCustomBackground {
+    return _backgroundImage != nil || _backgroundVideoURL != nil;
+}
+
+- (UIColor *)contentBackgroundColor {
+    return self.hasCustomBackground ? [UIColor clearColor] : self.backgroundColor;
 }
 
 - (void)setBackgroundBlurIntensity:(CGFloat)backgroundBlurIntensity {
@@ -285,6 +314,7 @@ NSString * const ThemeDidChangeNotification = @"ThemeDidChangeNotification";
     _rightPanelBackgroundColor = nil;
     _backgroundImage = nil;
     _blurredBackgroundImage = nil;
+    _backgroundVideoURL = nil;
     _backgroundBlurIntensity = 0;
     _uiOpacity = 1.0;
 
@@ -296,12 +326,15 @@ NSString * const ThemeDidChangeNotification = @"ThemeDidChangeNotification";
     [defaults removeObjectForKey:@"amethyst_topbar_bg_color"];
     [defaults removeObjectForKey:@"amethyst_rightpanel_bg_color"];
     [defaults removeObjectForKey:@"amethyst_bg_image"];
+    [defaults removeObjectForKey:@"amethyst_bg_video"];
     [defaults removeObjectForKey:@"amethyst_bg_blur"];
     [defaults removeObjectForKey:@"amethyst_ui_opacity"];
 
     NSArray *paths = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES);
     NSString *imgPath = [paths.firstObject stringByAppendingPathComponent:@"amethyst_bg.png"];
     [[NSFileManager defaultManager] removeItemAtPath:imgPath error:nil];
+    NSString *videoPath = [paths.firstObject stringByAppendingPathComponent:@"amethyst_bg.mp4"];
+    [[NSFileManager defaultManager] removeItemAtPath:videoPath error:nil];
 
     [self broadcastThemeChange];
 }

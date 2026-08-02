@@ -513,31 +513,37 @@ public class GLFW
     public static long mainContext = 0;
 
     static {
-        try {
-            System.load(System.getenv("BUNDLE_PATH") + "/AngelAuraAmethyst");
-        } catch (UnsatisfiedLinkError e) {
-            e.printStackTrace();
+        // This static block MUST stay pure Java. JDK 25+ eagerly initializes
+        // classes with JNI natives during System.load (org.lwjgl.system.Library
+        // <clinit> line 68 loads the app binary). During that eager init, native
+        // resolution only searches the library being loaded — liblwjgl/libffi
+        // symbols (FFI_TYPE_DOUBLE, memPutInt, ...) are not yet visible, so ANY
+        // native call here throws UnsatisfiedLinkError → ExceptionInInitializerError
+        // → "Could not initialize class org.lwjgl.glfw.GLFW".
+        // The app binary is loaded by Library.<clinit>; the error callback is
+        // created lazily on first use (line 574), when liblwjgl is fully bound.
+        System.err.println("[GLFW.<clinit>] start, pure-Java static block");
+        String sizeProp = System.getProperty("glfw.windowSize");
+        if (sizeProp != null) {
+            try {
+                String[] size = sizeProp.split("x");
+                mGLFWWindowWidth = Integer.valueOf(size[0]);
+                mGLFWWindowHeight = Integer.valueOf(size[1]);
+            } catch (Exception ignored) {}
         }
-        String[] size = System.getProperty("glfw.windowSize").split("x");
-        mGLFWWindowWidth = Integer.valueOf(size[0]);
-        mGLFWWindowHeight = Integer.valueOf(size[1]);
+        if (mGLFWWindowWidth <= 0) mGLFWWindowWidth = 1280;
+        if (mGLFWWindowHeight <= 0) mGLFWWindowHeight = 720;
 
-        // Minecraft triggers a glfwPollEvents() on splash screen, so update window size there.
-        // CallbackBridge.receiveCallback(CallbackBridge.EVENT_TYPE_FRAMEBUFFER_SIZE, mGLFWWindowWidth, mGLFWWindowHeight, 0, 0);
-        // CallbackBridge.receiveCallback(CallbackBridge.EVENT_TYPE_WINDOW_SIZE, mGLFWWindowWidth, mGLFWWindowHeight, 0, 0);
-
-        mGLFWErrorCallback = GLFWErrorCallback.createPrint();
         mGLFWKeyCodes = new ArrayMap<>();
 
         mGLFWWindowMap = new ArrayMap<>();
 
-        mGLFWVideoMode = new GLFWVidMode(ByteBuffer.allocateDirect(GLFWVidMode.SIZEOF));
-        memPutInt(mGLFWVideoMode.address() + mGLFWVideoMode.WIDTH, mGLFWWindowWidth);
-        memPutInt(mGLFWVideoMode.address() + mGLFWVideoMode.HEIGHT, mGLFWWindowHeight);
-        memPutInt(mGLFWVideoMode.address() + mGLFWVideoMode.REDBITS, 8);
-        memPutInt(mGLFWVideoMode.address() + mGLFWVideoMode.GREENBITS, 8);
-        memPutInt(mGLFWVideoMode.address() + mGLFWVideoMode.BLUEBITS, 8);
-        memPutInt(mGLFWVideoMode.address() + (long) mGLFWVideoMode.REFRESHRATE, Integer.parseInt(System.getProperty("UIScreen.maximumFramesPerSecond")));
+        // NOTE: mGLFWVideoMode is intentionally NOT created here. Its constructor
+        // (GLFWVidMode.<init>) calls MemoryUtil.memAddress, which reads static fields
+        // (UNSAFE/ADDRESS) only assigned AFTER MemoryUtil.<clinit> line 100. During the
+        // JDK 25+ eager-init window (inside System.load, see comment above) those fields
+        // are still null/0 -> NullPointerException. Created lazily on first
+        // glfwGetVideoMode() call, when MemoryUtil is fully initialized.
 
         // A way to generate key code names
         Field[] thisFieldArr = GLFW.class.getFields();
@@ -554,6 +560,7 @@ public class GLFW
         } catch (IllegalAccessException e) {
             // This will never happen since this is accessing itself
         }
+        System.err.println("[GLFW.<clinit>] end");
     }
 
     private static native long nglfwSetCharCallback(long window, long ptr);
@@ -964,8 +971,22 @@ public class GLFW
         }
     }
 
+    private static void ensureVideoModeCreated() {
+        if (mGLFWVideoMode != null) return;
+        ByteBuffer vidmodeContainer = ByteBuffer.allocateDirect(GLFWVidMode.SIZEOF);
+        mGLFWVideoMode = new GLFWVidMode(vidmodeContainer);
+        vidmodeContainer.order(ByteOrder.nativeOrder());
+        vidmodeContainer.putInt(mGLFWVideoMode.WIDTH, mGLFWWindowWidth);
+        vidmodeContainer.putInt(mGLFWVideoMode.HEIGHT, mGLFWWindowHeight);
+        vidmodeContainer.putInt(mGLFWVideoMode.REDBITS, 8);
+        vidmodeContainer.putInt(mGLFWVideoMode.GREENBITS, 8);
+        vidmodeContainer.putInt(mGLFWVideoMode.BLUEBITS, 8);
+        vidmodeContainer.putInt(mGLFWVideoMode.REFRESHRATE, Integer.parseInt(System.getProperty("UIScreen.maximumFramesPerSecond", "60")));
+    }
+
     @Nullable
     public static GLFWVidMode glfwGetVideoMode(long monitor) {
+        ensureVideoModeCreated();
         return mGLFWVideoMode;
     }
 

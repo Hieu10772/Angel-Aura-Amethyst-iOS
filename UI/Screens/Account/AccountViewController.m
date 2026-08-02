@@ -347,8 +347,8 @@
 
 - (void)updateColors {
     ThemeManager *theme = ThemeManager.shared;
-    self.view.backgroundColor = theme.backgroundColor;
-    _tableView.backgroundColor = theme.backgroundColor;
+    self.view.backgroundColor = theme.contentBackgroundColor;
+    _tableView.backgroundColor = theme.contentBackgroundColor;
     _addFormView.backgroundColor = theme.cardBackgroundColor;
     _addFormView.layer.borderColor = theme.separatorColor.CGColor;
 }

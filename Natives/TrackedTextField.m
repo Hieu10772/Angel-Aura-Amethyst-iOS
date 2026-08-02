@@ -32,17 +32,16 @@ extern bool isUseStackQueueCall;
 }
 
 - (void)sendText:(NSString *)text {
-    // NSLog(@"[KeyboardDebug] sendText processing string: '%@' (length: %lu)", text, (unsigned long)text.length);
+    NSLog(@"[KeyboardDebug] sendText processing string: '%@' (length: %lu), isUseStackQueueCall=%d", text, (unsigned long)text.length, isUseStackQueueCall);
     for (int i = 0; i < text.length; i++) {
         unichar theChar = [text characterAtIndex:i];
-        // NSLog(@"[KeyboardDebug] Sending character: '%C' (Unicode decimal: %d)", theChar, theChar);
+        NSLog(@"[KeyboardDebug] Sending character: '%C' (Unicode decimal: %d)", theChar, theChar);
         
-        if (isUseStackQueueCall && self.sendCharMods != nil) {
-            // NSLog(@"[KeyboardDebug] -> Routing to sendCharMods block");
+        if (self.sendCharMods != nil) {
+            NSLog(@"[KeyboardDebug] -> Routing to sendCharMods block (isUseStackQueueCall: %d)", isUseStackQueueCall);
             self.sendCharMods(theChar, 0);
         } else {
-            // NSLog(@"[KeyboardDebug] -> Routing to sendChar block (isUseStackQueueCall: %d, sendCharMods present: %s)", 
-            //       isUseStackQueueCall, self.sendCharMods != nil ? "YES" : "NO");
+            NSLog(@"[KeyboardDebug] -> Routing to sendChar block (sendCharMods present: NO)");
             self.sendChar(theChar);
         }
     }
@@ -89,7 +88,7 @@ extern bool isUseStackQueueCall;
 }
 
 - (void)deleteBackward {
-    // NSLog(@"[KeyboardDebug] deleteBackward invoked (Backspace pressed)");
+    NSLog(@"[KeyboardDebug] deleteBackward invoked (Backspace pressed)");
     if (self.text.length > 1) {
         [super deleteBackward];
     } else {
@@ -106,6 +105,7 @@ extern bool isUseStackQueueCall;
 }
 
 - (NSRange)insertFilteredText:(NSString *)text {
+    NSLog(@"[KeyboardDebug] insertFilteredText: '%@', skipNextTextInsertion=%d", text, self.skipNextTextInsertion);
     if (self.skipNextTextInsertion) {
         self.skipNextTextInsertion = NO;
         return [super insertFilteredText:text];

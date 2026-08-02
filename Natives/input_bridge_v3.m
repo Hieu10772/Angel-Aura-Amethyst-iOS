@@ -263,6 +263,12 @@ void JNI_OnUnload(JavaVM* vm, void* reserved) {
 JNIEXPORT jlong JNICALL Java_org_lwjgl_glfw_GLFW_nglfwSet##NAME##Callback(JNIEnv * env, jclass cls, jlong window, jlong callbackptr) { \
     void** oldCallback = (void**) &GLFW_invoke_##NAME; \
     GLFW_invoke_##NAME = (GLFW_invoke_##NAME##_func*) (uintptr_t) callbackptr; \
+    if (showingWindow == 0 && window != 0) { \
+        showingWindow = (long) window; \
+        NSLog(@"[InputDiag] callback registered: %s — showingWindow fallback set to %p", #NAME, (void*) showingWindow); \
+    } else { \
+        NSLog(@"[KeyboardDebug] callback registered: %s window=%p ptr=%p showingWindow=%p", #NAME, (void*) window, (void*) (uintptr_t) callbackptr, (void*) showingWindow); \
+    } \
     return (jlong) (uintptr_t) *oldCallback; \
 }
 
@@ -289,6 +295,10 @@ void handleFramebufferSizeJava(void* window, int w, int h) {
 
 void pojavPumpEvents(void* window) {
     static BOOL setInputReady = NO;
+    if (window && showingWindow == 0) {
+        showingWindow = (long) window;
+        NSLog(@"[InputDiag] pojavPumpEvents: showingWindow fallback set to %p", (void*) showingWindow);
+    }
     if(!setInputReady) {
         setInputReady = YES;
         CallbackBridge_nativeSetInputReady(YES);
@@ -305,15 +315,15 @@ void pojavPumpEvents(void* window) {
         GLFWInputEvent event = events[i];
         switch(event.type) {
             case EVENT_TYPE_CHAR:
-                // NSLog(@"[KeyboardDebug] Queue: Processing EVENT_TYPE_CHAR for character %d", event.i1);
+                NSLog(@"[KeyboardDebug] Queue: Processing EVENT_TYPE_CHAR for character %d", event.i1);
                 if(GLFW_invoke_Char) GLFW_invoke_Char(window, event.i1);
                 break;
             case EVENT_TYPE_CHAR_MODS:
-                // NSLog(@"[KeyboardDebug] Queue: Processing EVENT_TYPE_CHAR_MODS for character %d", event.i1);
+                NSLog(@"[KeyboardDebug] Queue: Processing EVENT_TYPE_CHAR_MODS for character %d", event.i1);
                 if(GLFW_invoke_CharMods) {
                     GLFW_invoke_CharMods(window, event.i1, event.i2);
                 } else if (GLFW_invoke_Char) {
-                    //NSLog(@"[KeyboardDebug] Queue: Fallback to GLFW_invoke_Char for character %d", event.i1);
+                    NSLog(@"[KeyboardDebug] Queue: Fallback to GLFW_invoke_Char for character %d", event.i1);
                     GLFW_invoke_Char(window, event.i1);
                 }
                 break;
@@ -566,6 +576,38 @@ static BOOL aasdl_available(void) {
         NSLog(@"[SDLInject] SDL event injection ready");
     }
     return YES;
+}
+
+/* Minecraft 26.x (SDL3 windowing / RenderPearl) refuses SDL_Init(SDL_INIT_VIDEO)
+ * until SDL_SetMainReady() has been called. The launcher used to do this
+ * through org.lwjgl.sdl.SDLMain, but that initialized LWJGL in the launcher's
+ * classloader and preloaded liblwjgl.dylib — which then makes Fabric/Knot
+ * (separate classloader with Mojang's LWJGL) fail with "Native Library
+ * liblwjgl.dylib already loaded in another classloader". Set the flag
+ * directly on the native SDL3 instead, so whichever classloader the game
+ * uses finds it already set. */
+void aasdl_setMainReady(void) {
+    static BOOL done;
+    if (done) return;
+    done = YES;
+    NSString *sdlDir = [[NSBundle.mainBundle.bundlePath stringByAppendingPathComponent:@"libs"] stringByAppendingPathComponent:@"lwjgl41_natives"];
+    NSString *sdlPath = [sdlDir stringByAppendingPathComponent:@"libSDL3.dylib"];
+    if (![NSFileManager.defaultManager fileExistsAtPath:sdlPath]) {
+        NSLog(@"[SDLInject] libSDL3.dylib not found, skipping SDL_SetMainReady");
+        return;
+    }
+    void *handle = dlopen(sdlPath.UTF8String, RTLD_LAZY | RTLD_GLOBAL);
+    if (!handle) {
+        NSLog(@"[SDLInject] dlopen libSDL3.dylib failed: %s", dlerror());
+        return;
+    }
+    void (*setMainReady)(void) = (void (*)(void)) dlsym(handle, "SDL_SetMainReady");
+    if (setMainReady) {
+        setMainReady();
+        NSLog(@"[SDLInject] SDL_SetMainReady called from C");
+    } else {
+        NSLog(@"[SDLInject] SDL_SetMainReady not found in libSDL3.dylib");
+    }
 }
 
 static uint32_t aasdl_windowID(void) {
@@ -834,6 +876,7 @@ static uint32_t aasdl_mapMods(int mods) {
 }
 
 BOOL CallbackBridge_nativeSendChar(jchar codepoint /* jint codepoint */) {
+    NSLog(@"[KeyboardDebug] Bridge: sendChar code=%d, isInputReady=%d, Char=%p, showingWindow=%p", codepoint, isInputReady, GLFW_invoke_Char, (void*) showingWindow);
     if (GLFW_invoke_Char && isInputReady) {
         if (isUseStackQueueCall) {
             sendData(EVENT_TYPE_CHAR, codepoint, 0, 0, 0);
@@ -850,30 +893,29 @@ BOOL CallbackBridge_nativeSendChar(jchar codepoint /* jint codepoint */) {
 }
 
 BOOL CallbackBridge_nativeSendCharMods(jchar codepoint, int mods) {
-    // NSLog(@"[KeyboardDebug] Bridge: Got character code=%d, modifiers=%d", codepoint, mods);
-    // NSLog(@"[KeyboardDebug] Bridge: Game status: GLFW_invoke_CharMods=%p, GLFW_invoke_Char=%p, isInputReady=%d", 
-    //      GLFW_invoke_CharMods, GLFW_invoke_Char, isInputReady);
+    NSLog(@"[KeyboardDebug] Bridge: Got character code=%d, modifiers=%d, isInputReady=%d, CharMods=%p, Char=%p, showingWindow=%p, queue=%d", codepoint, mods, isInputReady, GLFW_invoke_CharMods, GLFW_invoke_Char, (void*) showingWindow, isUseStackQueueCall);
 
     if ((GLFW_invoke_CharMods || GLFW_invoke_Char) && isInputReady) {
         if (isUseStackQueueCall) {
-            // NSLog(@"[KeyboardDebug] Bridge: Sending character %d to stack-queue (isUseStackQueueCall)", codepoint);
+            NSLog(@"[KeyboardDebug] Bridge: Sending character %d to stack-queue (isUseStackQueueCall)", codepoint);
             sendData(EVENT_TYPE_CHAR_MODS, (unsigned int) codepoint, mods, 0, 0);
         } else {
             if (GLFW_invoke_CharMods) {
-                // NSLog(@"[KeyboardDebug] Bridge: Direct call to GLFW_invoke_CharMods for character %d", codepoint);
+                NSLog(@"[KeyboardDebug] Bridge: Direct call to GLFW_invoke_CharMods for character %d", codepoint);
                 GLFW_invoke_CharMods((void*) showingWindow, codepoint, mods);
             } else {
-                // NSLog(@"[KeyboardDebug] Bridge: Fallback! Direct call to GLFW_invoke_Char for character %d", codepoint);
+                NSLog(@"[KeyboardDebug] Bridge: Fallback! Direct call to GLFW_invoke_Char for character %d", codepoint);
                 GLFW_invoke_Char((void*) showingWindow, (unsigned int) codepoint);
             }
         }
         return YES;
     } else if (aasdl_available()) {
+        NSLog(@"[KeyboardDebug] Bridge: Falling back to SDL text input for character %d", codepoint);
         aasdl_pushTextInput((uint32_t) codepoint);
         return YES;
     }
     
-    // NSLog(@"[KeyboardDebug] Bridge CRITICAL ERROR: Character %d DISCARDED! Reason: No handlers or game not ready.", codepoint);
+    NSLog(@"[KeyboardDebug] Bridge CRITICAL ERROR: Character %d DISCARDED! Reason: No handlers or game not ready.", codepoint);
     return NO;
 }
 /*

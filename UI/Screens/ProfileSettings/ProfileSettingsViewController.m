@@ -198,8 +198,8 @@
 
 - (void)updateColors {
     ThemeManager *theme = ThemeManager.shared;
-    self.view.backgroundColor = theme.backgroundColor;
-    _tableView.backgroundColor = theme.backgroundColor;
+    self.view.backgroundColor = theme.contentBackgroundColor;
+    _tableView.backgroundColor = theme.contentBackgroundColor;
 }
 
 #pragma mark - TableView

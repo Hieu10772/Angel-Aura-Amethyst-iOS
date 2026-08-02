@@ -25,6 +25,9 @@ extern NSString * const ThemeDidChangeNotification;
 
 @property (nonatomic) UIImage *backgroundImage;
 @property (nonatomic) UIImage *blurredBackgroundImage;
+@property (nonatomic) NSURL *backgroundVideoURL;
+@property (nonatomic, readonly) BOOL hasCustomBackground;
+@property (nonatomic, readonly) UIColor *contentBackgroundColor;
 @property (nonatomic) CGFloat backgroundBlurIntensity;
 @property (nonatomic) CGFloat uiOpacity;
 

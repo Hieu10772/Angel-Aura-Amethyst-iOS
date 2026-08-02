@@ -8,6 +8,7 @@ import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
 import java.util.*;
 import java.util.concurrent.*;
+import java.util.zip.*;
 
 import org.lwjgl.glfw.CallbackBridge;
 import org.lwjgl.glfw.GLFW;
@@ -124,6 +125,97 @@ public class PojavLauncher {
         }
     }
 
+    // ============ LWJGL Library-order fix ============
+    // The game's LWJGL (Fabric/Knot classloader) fails on JDK 25+ because eager
+    // class init during System.load of the native executable initializes
+    // org.lwjgl.glfw.GLFW before liblwjgl.dylib is registered: GLFWErrorCallbackI
+    // <clinit> -> LibFFI.<clinit> -> FFI_TYPE_DOUBLE() throws UnsatisfiedLinkError
+    // ("Could not initialize class org.lwjgl.glfw.GLFW"). Older builds of the
+    // lwjgl jar call System.load(app binary) BEFORE loadSystem("org.lwjgl").
+    // This patches the instance's lwjgl core jar with the fixed Library.class
+    // (loadSystem first), matching lwjgl41's build.
+    private static void patchInstanceLwjgl() {
+        byte[] fixedLibrary = readResourceBytes("/lwjglfix/Library.class");
+        if (fixedLibrary == null) {
+            System.out.println("[LWJGLFix] fixed Library.class resource missing, skipping");
+            return;
+        }
+        int patched = 0;
+        File gameDir = new File(Tools.DIR_GAME_NEW);
+        List<File> jars = new ArrayList<>();
+        try {
+            Files.walk(gameDir.toPath()).filter(p -> p.toString().endsWith(".jar"))
+                .forEach(p -> jars.add(p.toFile()));
+        } catch (IOException e) {
+            System.err.println("[LWJGLFix] walk failed: " + e);
+            return;
+        }
+        for (File jar : jars) {
+            try {
+                if (patchJarLibraryClass(jar, fixedLibrary)) patched++;
+            } catch (Exception e) {
+                System.err.println("[LWJGLFix] failed on " + jar + ": " + e);
+            }
+        }
+        System.out.println("[LWJGLFix] patched " + patched + " lwjgl jar(s) under " + gameDir);
+    }
+
+    private static boolean patchJarLibraryClass(File jar, byte[] fixedLibrary) throws IOException {
+        byte[] oldBytes = readJarEntry(jar, "org/lwjgl/system/Library.class");
+        if (oldBytes == null) return false;
+        if (Arrays.equals(oldBytes, fixedLibrary)) return false;
+        File tmp = new File(jar.getParentFile(), jar.getName() + ".lwjglfix.tmp");
+        byte[] buf = new byte[65536];
+        try (ZipInputStream zin = new ZipInputStream(new FileInputStream(jar));
+             ZipOutputStream zout = new ZipOutputStream(new FileOutputStream(tmp))) {
+            ZipEntry in;
+            while ((in = zin.getNextEntry()) != null) {
+                ZipEntry out = new ZipEntry(in.getName());
+                out.setTime(in.getTime());
+                zout.putNextEntry(out);
+                if (in.getName().equals("org/lwjgl/system/Library.class")) {
+                    zout.write(fixedLibrary);
+                } else {
+                    int n;
+                    while ((n = zin.read(buf)) > 0) zout.write(buf, 0, n);
+                }
+                zout.closeEntry();
+            }
+        }
+        if (!tmp.renameTo(jar)) {
+            Files.move(tmp.toPath(), jar.toPath(), StandardCopyOption.REPLACE_EXISTING);
+        }
+        System.out.println("[LWJGLFix] replaced Library.class in " + jar);
+        return true;
+    }
+
+    private static byte[] readJarEntry(File jar, String entryName) throws IOException {
+        try (ZipFile zip = new ZipFile(jar)) {
+            ZipEntry entry = zip.getEntry(entryName);
+            if (entry == null) return null;
+            try (InputStream in = zip.getInputStream(entry)) {
+                ByteArrayOutputStream out = new ByteArrayOutputStream();
+                byte[] buf = new byte[65536];
+                int n;
+                while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
+                return out.toByteArray();
+            }
+        }
+    }
+
+    private static byte[] readResourceBytes(String path) {
+        try (InputStream in = PojavLauncher.class.getResourceAsStream(path)) {
+            if (in == null) return null;
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            byte[] buf = new byte[65536];
+            int n;
+            while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
+            return out.toByteArray();
+        } catch (IOException e) {
+            return null;
+        }
+    }
+
     public static void launchMinecraft(String[] args) throws Throwable {
         // Args for Spiral Knights
         System.setProperty("appdir", "./spiral");
@@ -156,16 +248,13 @@ public class PojavLauncher {
 
         System.setProperty("org.lwjgl.vulkan.libname", "libMoltenVK.dylib");
 
-        // SDL3 refuses SDL_Init(SDL_INIT_VIDEO) unless SDL_SetMainReady() was
-        // called first. On iOS there is no SDL_main entry point (the app uses
-        // its own UIApplicationDelegate), so mark readiness ourselves. In
-        // LWJGL 3.4.1 the function lives in org.lwjgl.sdl.SDLMain; older
-        // LWJGL versions lack the SDL module and must be skipped.
-        try {
-            Class.forName("org.lwjgl.sdl.SDLMain").getMethod("SDL_SetMainReady").invoke(null);
-        } catch (Throwable th) {
-            System.err.println("[PojavLauncher] SDL_SetMainReady not available, ignoring: " + th);
-        }
+        // NOTE: SDL_SetMainReady is now called from the native side
+        // (aasdl_setMainReady at pojavInit). Do NOT touch org.lwjgl.sdl.SDLMain
+        // here: initializing LWJGL in the launcher's classloader preloads
+        // liblwjgl.dylib, which then makes Fabric/Knot fail with
+        // "Native Library liblwjgl.dylib already loaded in another classloader"
+        // (Mojang's LWJGL runs in a separate classloader and tries to load the
+        // same native library again).
 
         MinecraftAccount account = MinecraftAccount.load(args[0]);
         JMinecraftVersionList.Version version = Tools.getVersionInfo(args[1]);
@@ -179,6 +268,12 @@ public class PojavLauncher {
             if (log4jArg != null) {
                 System.out.println("Using log4j argument: " + log4jArg);
             }
+        }
+
+        try {
+            patchInstanceLwjgl();
+        } catch (Throwable t) {
+            System.err.println("[LWJGLFix] patch failed: " + t);
         }
 
         Tools.launchMinecraft(account, version);

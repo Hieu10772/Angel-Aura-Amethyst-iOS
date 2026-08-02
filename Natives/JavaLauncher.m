@@ -397,6 +397,13 @@ int launchJVM(NSString *username, id launchTarget, int width, int height, int mi
         javaLibraryPath = [NSString stringWithFormat:@"%@:%@", javaLibraryPath, dhNativeLibPath];
     }
     margv[++margc] = [NSString stringWithFormat:@"-Djava.library.path=%@", javaLibraryPath].UTF8String;
+    // Mojang's LWJGL (loaded by Fabric/Knot from the game jar instead of our
+    // shim) treats java.library.path as a SINGLE directory; a colon-joined
+    // list fails its directory check ("Contents of java.library.path : <not a
+    // directory>"). Point org.lwjgl.librarypath at exactly one natives dir —
+    // LWJGL checks this property before java.library.path, so Fabric-launched
+    // games (e.g. Sodium) can find liblwjgl.dylib and friends.
+    margv[++margc] = [NSString stringWithFormat:@"-Dorg.lwjgl.librarypath=%@", [javaLibraryPath componentsSeparatedByString:@":"].firstObject].UTF8String;
     
     margv[++margc] = [NSString stringWithFormat:@"-Duser.dir=%@", gameDir].UTF8String;
     margv[++margc] = [NSString stringWithFormat:@"-Duser.home=%s", getenv("POJAV_HOME")].UTF8String;

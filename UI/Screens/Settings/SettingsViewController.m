@@ -7,6 +7,7 @@
 #import "CurseForgeService.h"
 #import "CustomControlsViewController.h"
 #import <PhotosUI/PhotosUI.h>
+#import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 
 @interface SettingsViewController () <UITableViewDelegate, UITableViewDataSource, UIColorPickerViewControllerDelegate, UINavigationControllerDelegate, UIImagePickerControllerDelegate, PHPickerViewControllerDelegate>
 @property (nonatomic) UITableView *tableView;
@@ -125,7 +126,7 @@
             @{@"type": @"color", @"label": localize(@"Top Bar Color", nil), @"key": @"amethyst_topbar_bg_color"},
             @{@"type": @"color", @"label": localize(@"Right Panel Color", nil), @"key": @"amethyst_rightpanel_bg_color"},
             @{@"type": @"color", @"label": localize(@"Content Card Color", nil), @"key": @"amethyst_card_bg_color"},
-            @{@"type": @"image", @"label": localize(@"Background Image", nil)},
+            @{@"type": @"image", @"label": localize(@"Background", nil)},
             @{@"type": @"slider", @"label": localize(@"UI Opacity", nil), @"key": @"amethyst_ui_opacity", @"min": @0, @"max": @100, @"suffix": @"%"},
             @{@"type": @"slider", @"label": localize(@"Background Blur", nil), @"key": @"amethyst_bg_blur", @"min": @0, @"max": @20, @"suffix": @""},
             @{@"type": @"color", @"label": localize(@"Reset Appearance", nil), @"key": @"amethyst_reset_appearance"},
@@ -187,8 +188,8 @@
 
 - (void)updateColors {
     ThemeManager *theme = ThemeManager.shared;
-    self.view.backgroundColor = theme.backgroundColor;
-    _tableView.backgroundColor = theme.backgroundColor;
+    self.view.backgroundColor = theme.contentBackgroundColor;
+    _tableView.backgroundColor = theme.contentBackgroundColor;
 }
 
 #pragma mark - TableView
@@ -515,6 +516,18 @@
         [[NSNotificationCenter defaultCenter] postNotificationName:@"LiquidGlassDidChangeNotification" object:nil];
     } else if ([item[@"key"] isEqualToString:@"general.lock_landscape"]) {
         [UIViewController attemptRotationToDeviceOrientation];
+        if (@available(iOS 16.0, *)) {
+            UIInterfaceOrientationMask mask = sender.on ? UIInterfaceOrientationMaskLandscape : UIInterfaceOrientationMaskAll;
+            for (UIScene *scene in UIApplication.sharedApplication.connectedScenes) {
+                if ([scene isKindOfClass:UIWindowScene.class]) {
+                    UIWindowSceneGeometryPreferencesIOS *prefs = [[UIWindowSceneGeometryPreferencesIOS alloc] initWithInterfaceOrientations:mask];
+                    [(UIWindowScene *)scene requestGeometryUpdateWithPreferences:prefs errorHandler:^(NSError *error) {
+                        NSLog(@"[LockLandscape] requestGeometryUpdate error: %@", error);
+                    }];
+                }
+            }
+        }
+        [[NSNotificationCenter defaultCenter] postNotificationName:@"OrientationLockDidChange" object:nil];
     }
 }
 
@@ -650,22 +663,25 @@
 }
 
 - (void)showImagePicker {
-    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:localize(@"Background Image", nil) message:nil preferredStyle:UIAlertControllerStyleActionSheet];
+    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:localize(@"Background", nil) message:nil preferredStyle:UIAlertControllerStyleActionSheet];
 
-    [sheet addAction:[UIAlertAction actionWithTitle:localize(@"Choose from Library", nil) style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
-        [self openPhotoLibrary];
+    [sheet addAction:[UIAlertAction actionWithTitle:localize(@"Choose Image from Library", nil) style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
+        [self openPhotoLibraryWithFilter:[PHPickerFilter imagesFilter]];
     }]];
-    [sheet addAction:[UIAlertAction actionWithTitle:localize(@"Remove Background Image", nil) style:UIAlertActionStyleDestructive handler:^(UIAlertAction *action) {
+    [sheet addAction:[UIAlertAction actionWithTitle:localize(@"Choose Video from Library", nil) style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
+        [self openPhotoLibraryWithFilter:[PHPickerFilter videosFilter]];
+    }]];
+    [sheet addAction:[UIAlertAction actionWithTitle:localize(@"Remove Background", nil) style:UIAlertActionStyleDestructive handler:^(UIAlertAction *action) {
         [self removeBackgroundImage];
     }]];
     [sheet addAction:[UIAlertAction actionWithTitle:localize(@"Cancel", nil) style:UIAlertActionStyleCancel handler:nil]];
     [self presentViewController:sheet animated:YES completion:nil];
 }
 
-- (void)openPhotoLibrary {
+- (void)openPhotoLibraryWithFilter:(PHPickerFilter *)filter {
     if (@available(iOS 14, *)) {
         PHPickerConfiguration *config = [[PHPickerConfiguration alloc] init];
-        config.filter = [PHPickerFilter imagesFilter];
+        config.filter = filter;
         config.selectionLimit = 1;
         PHPickerViewController *picker = [[PHPickerViewController alloc] initWithConfiguration:config];
         picker.delegate = self;
@@ -684,17 +700,53 @@
     if (results.count == 0) return;
 
     PHPickerResult *result = results.firstObject;
-    [result.itemProvider loadObjectOfClass:[UIImage class] completionHandler:^(id<NSItemProviderReading> object, NSError *error) {
-        if (error || !object) return;
-        UIImage *image = (UIImage *)object;
-        dispatch_async(dispatch_get_main_queue(), ^{
-            [self saveBackgroundImage:image];
-        });
-    }];
+    NSItemProvider *provider = result.itemProvider;
+    if ([provider hasItemConformingToTypeIdentifier:UTTypeMovie.identifier]) {
+        [provider loadFileRepresentationForTypeIdentifier:UTTypeMovie.identifier completionHandler:^(NSURL *url, NSError *error) {
+            if (error || !url) return;
+            NSString *destPath = [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES).firstObject stringByAppendingPathComponent:@"amethyst_bg.mp4"];
+            NSFileManager *fm = [NSFileManager defaultManager];
+            [fm removeItemAtPath:destPath error:nil];
+            BOOL access = [url startAccessingSecurityScopedResource];
+            NSError *copyError = nil;
+            BOOL ok = [fm copyItemAtURL:url toURL:[NSURL fileURLWithPath:destPath] error:&copyError];
+            if (!ok) {
+                NSData *data = [NSData dataWithContentsOfURL:url options:0 error:&copyError];
+                if (data) {
+                    ok = [data writeToFile:destPath atomically:YES];
+                }
+            }
+            if (access) [url stopAccessingSecurityScopedResource];
+            dispatch_async(dispatch_get_main_queue(), ^{
+                if (!ok) {
+                    NSLog(@"[saveBackgroundVideo] copy failed in provider handler: %@ (source: %@)", copyError, url);
+                    showDialog(localize(@"Error", nil), localize(@"Could not copy the video. Please try another file.", nil));
+                    return;
+                }
+                ThemeManager.shared.backgroundVideoURL = [NSURL fileURLWithPath:destPath];
+                [ThemeManager.shared broadcastThemeChange];
+            });
+        }];
+    } else {
+        [provider loadObjectOfClass:[UIImage class] completionHandler:^(id<NSItemProviderReading> object, NSError *error) {
+            if (error || !object) return;
+            UIImage *image = (UIImage *)object;
+            dispatch_async(dispatch_get_main_queue(), ^{
+                [self saveBackgroundImage:image];
+            });
+        }];
+    }
 }
 
 - (void)imagePickerController:(UIImagePickerController *)picker didFinishPickingMediaWithInfo:(NSDictionary<UIImagePickerControllerInfoKey,id> *)info {
     [picker dismissViewControllerAnimated:YES completion:nil];
+    if (picker.mediaTypes.count > 1 || [picker.mediaTypes.firstObject isEqualToString:UTTypeMovie.identifier]) {
+        NSURL *videoURL = info[UIImagePickerControllerMediaURL];
+        if (videoURL) {
+            [self saveBackgroundVideo:videoURL];
+            return;
+        }
+    }
     UIImage *image = info[UIImagePickerControllerOriginalImage];
     if (image) {
         [self saveBackgroundImage:image];
@@ -716,13 +768,44 @@
     [ThemeManager.shared broadcastThemeChange];
 }
 
+- (void)saveBackgroundVideo:(NSURL *)videoURL {
+    NSArray *paths = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES);
+    NSString *docsPath = paths.firstObject;
+    NSString *destPath = [docsPath stringByAppendingPathComponent:@"amethyst_bg.mp4"];
+
+    NSFileManager *fm = [NSFileManager defaultManager];
+    [fm removeItemAtPath:destPath error:nil];
+
+    BOOL access = [videoURL startAccessingSecurityScopedResource];
+    NSError *error = nil;
+    BOOL ok = [fm copyItemAtURL:videoURL toURL:[NSURL fileURLWithPath:destPath] error:&error];
+    if (!ok) {
+        NSLog(@"[saveBackgroundVideo] copyItemAtURL failed: %@ (source: %@)", error, videoURL);
+        NSData *data = [NSData dataWithContentsOfURL:videoURL options:0 error:&error];
+        if (data) {
+            ok = [data writeToFile:destPath atomically:YES];
+        }
+        if (!ok) NSLog(@"[saveBackgroundVideo] data fallback failed: %@", error);
+    }
+    if (access) [videoURL stopAccessingSecurityScopedResource];
+
+    if (!ok) {
+        showDialog(localize(@"Error", nil), localize(@"Could not copy the video. Please try another file.", nil));
+        return;
+    }
+    ThemeManager.shared.backgroundVideoURL = [NSURL fileURLWithPath:destPath];
+    [ThemeManager.shared broadcastThemeChange];
+}
+
 - (void)removeBackgroundImage {
     ThemeManager.shared.backgroundImage = nil;
-    [[NSUserDefaults standardUserDefaults] removeObjectForKey:@"amethyst_bg_image"];
+    ThemeManager.shared.backgroundVideoURL = nil;
 
     NSArray *paths = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES);
     NSString *imgPath = [paths.firstObject stringByAppendingPathComponent:@"amethyst_bg.png"];
     [[NSFileManager defaultManager] removeItemAtPath:imgPath error:nil];
+    NSString *videoPath = [paths.firstObject stringByAppendingPathComponent:@"amethyst_bg.mp4"];
+    [[NSFileManager defaultManager] removeItemAtPath:videoPath error:nil];
 
     [ThemeManager.shared broadcastThemeChange];
 }
