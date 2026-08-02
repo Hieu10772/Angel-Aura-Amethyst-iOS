@@ -150,17 +150,10 @@
     if (parts.count < 2) return @"3.3.3";
 
     int major = [parts[0] intValue];
-    int minor = [parts[1] intValue];
 
-    if (major == 1) {
-        if (minor < 21) return @"3.3.3";
-        if (minor == 21 && parts.count > 2) {
-            int patch = [parts[2] intValue];
-            if (patch <= 11) return @"3.3.3";
-        }
-        if (minor > 21) return @"3.3.3";
-        return @"3.3.3";
-    }
+    // Mojang version manifests (piston-meta): 26.1+ use LWJGL 3.4.1 (SDL3 backend);
+    // everything from 1.13 to 1.21.x uses LWJGL 3.x <= 3.3.3, and 1.8-1.12.x use
+    // LWJGL 2 which is bridged by lwjglx inside our 3.3.3 build.
     if (major >= 26) return @"3.4.1";
 
     return @"3.3.3";

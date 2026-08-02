@@ -156,6 +156,17 @@ public class PojavLauncher {
 
         System.setProperty("org.lwjgl.vulkan.libname", "libMoltenVK.dylib");
 
+        // SDL3 refuses SDL_Init(SDL_INIT_VIDEO) unless SDL_SetMainReady() was
+        // called first. On iOS there is no SDL_main entry point (the app uses
+        // its own UIApplicationDelegate), so mark readiness ourselves. In
+        // LWJGL 3.4.1 the function lives in org.lwjgl.sdl.SDLMain; older
+        // LWJGL versions lack the SDL module and must be skipped.
+        try {
+            Class.forName("org.lwjgl.sdl.SDLMain").getMethod("SDL_SetMainReady").invoke(null);
+        } catch (Throwable th) {
+            System.err.println("[PojavLauncher] SDL_SetMainReady not available, ignoring: " + th);
+        }
+
         MinecraftAccount account = MinecraftAccount.load(args[0]);
         JMinecraftVersionList.Version version = Tools.getVersionInfo(args[1]);
         System.out.println("Launching Minecraft " + (version != null ? version.id : "null"));

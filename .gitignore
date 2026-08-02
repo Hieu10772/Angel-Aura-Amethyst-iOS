@@ -16,3 +16,12 @@ entitlements.codesign.xml
 /Compare
 /.rule/
 /sample/
+
+# Build artifacts (users can build themselves)
+/amethyst-prebuilt-libraries/build/
+/amethyst-prebuilt-libraries/SDL/SDL3/build_ios/
+/lwgjl/*/bin/
+/lwgjl/*/.gradle/
+/lwgjl/*/libffi/build*/
+/lwgjl/*/.github/workflows/android/.gradle/
+/lwgjl/*/.github/workflows/android/build/

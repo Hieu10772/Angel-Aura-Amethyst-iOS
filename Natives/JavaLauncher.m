@@ -379,6 +379,20 @@ int launchJVM(NSString *username, id launchTarget, int width, int height, int mi
     
     // Add DH native library path if available
     NSString *javaLibraryPath = [NSBundle.mainBundle.bundlePath stringByAppendingPathComponent:@"Frameworks"];
+    NSString *lwjglVersion = [VersionDirectoryManager resolveEffectiveLwjglVersion];
+    if ([lwjglVersion isEqualToString:@"3.4.1"]) {
+        javaLibraryPath = [NSString stringWithFormat:@"%@:%@",
+            [NSBundle.mainBundle.bundlePath stringByAppendingPathComponent:@"libs/lwjgl41_natives"],
+            javaLibraryPath];
+    } else if ([lwjglVersion isEqualToString:@"3.3.6"]) {
+        javaLibraryPath = [NSString stringWithFormat:@"%@:%@",
+            [NSBundle.mainBundle.bundlePath stringByAppendingPathComponent:@"libs/lwjgl36_natives"],
+            javaLibraryPath];
+    } else {
+        javaLibraryPath = [NSString stringWithFormat:@"%@:%@",
+            [NSBundle.mainBundle.bundlePath stringByAppendingPathComponent:@"libs/lwjgl33_natives"],
+            javaLibraryPath];
+    }
     if (dhNativeLibPath) {
         javaLibraryPath = [NSString stringWithFormat:@"%@:%@", javaLibraryPath, dhNativeLibPath];
     }
@@ -557,16 +571,21 @@ int launchJVM(NSString *username, id launchTarget, int width, int height, int mi
     init_loadCustomJvmFlags(&margc, (const char **)margv);
     NSLog(@"[Init] Found JLI lib");
 
-    NSString *lwjglVersion = [VersionDirectoryManager resolveEffectiveLwjglVersion];
+    NSString *lwjglDirPath;
     NSString *lwjglJarPath;
     if ([lwjglVersion isEqualToString:@"3.4.1"]) {
-        lwjglJarPath = [librariesPath stringByAppendingPathComponent:@"lwjgl41/lwjgl.jar"];
+        lwjglDirPath = [librariesPath stringByAppendingPathComponent:@"lwjgl41"];
+        lwjglJarPath = [lwjglDirPath stringByAppendingPathComponent:@"lwjgl.jar"];
+    } else if ([lwjglVersion isEqualToString:@"3.3.6"]) {
+        lwjglDirPath = [librariesPath stringByAppendingPathComponent:@"lwjgl36"];
+        lwjglJarPath = [lwjglDirPath stringByAppendingPathComponent:@"lwjgl.jar"];
     } else {
-        lwjglJarPath = [librariesPath stringByAppendingPathComponent:@"lwjgl33/lwjgl.jar"];
+        lwjglDirPath = [librariesPath stringByAppendingPathComponent:@"lwjgl33"];
+        lwjglJarPath = [lwjglDirPath stringByAppendingPathComponent:@"lwjgl.jar"];
     }
     setenv("LWJGL_VERSION", lwjglVersion.UTF8String, 1);
 
-    NSString *classpath = [NSString stringWithFormat:@"%@/*:%@", librariesPath, lwjglJarPath];
+    NSString *classpath = [NSString stringWithFormat:@"%@/*:%@/*:%@", librariesPath, lwjglDirPath, lwjglJarPath];
     if (launchJar) {
         classpath = [classpath stringByAppendingFormat:@":%@", launchTarget];
         margv[++margc] = [NSString stringWithFormat:@"-Dpojav.runJar=%@", launchTarget].UTF8String;

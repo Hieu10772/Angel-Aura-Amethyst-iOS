@@ -129,3 +129,6 @@ void CallbackBridge_nativeSendScreenSize(int width, int height);
 void CallbackBridge_nativeSendScroll(CGFloat xoffset, CGFloat yoffset);
 void CallbackBridge_sendKeycode(int keycode, jchar keychar, int scancode, int modifiers, BOOL isDown);
 void CallbackBridge_pauseGameIfNeed();
+void AASDL_NoteKey();
+double AASDL_LastGrabChangeAge();
+bool AASDL_HardwareKeySeenWithin(double seconds);

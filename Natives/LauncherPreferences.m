@@ -179,6 +179,7 @@ NSArray* getRendererNames(BOOL containsDefault) {
 NSArray* getLwjglVersions(BOOL containsDefault) {
     NSMutableArray *array = @[
         @"3.3.3",
+        @"3.3.6",
         @"3.4.1"
     ].mutableCopy;
     if (containsDefault) {
@@ -192,6 +193,7 @@ NSArray* getLwjglVersionsWithAuto(void) {
     NSMutableArray *array = @[
         @"(auto)",
         @"3.3.3",
+        @"3.3.6",
         @"3.4.1"
     ].mutableCopy;
     return array;
