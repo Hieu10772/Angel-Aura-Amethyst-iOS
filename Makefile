@@ -280,8 +280,11 @@ native: dep_mg
 	-rm -f $(WORKINGDIR)/libawt_headless.dylib
 	echo '[Amethyst v$(VERSION)] native - end'
 
-java:
+java: lwgjl
 	echo '[Amethyst v$(VERSION)] java - start'
+	# lwgjl must finish first: the java compile classpath includes
+	# libs/lwjgl{,36,41}/lwjgl.jar, and the lwgjl target writes those jars.
+	# Running java in parallel reads partially-written/empty zip files.
 	# Each .java file compiles in its own javac VM (JavaApp Makefile), so keep
 	# parallelism low: running 10+ javac VMs concurrently with the parallel
 	# native/lwgjl/dep_mg jobs exhausts CI runner memory and crashes javac
