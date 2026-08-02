@@ -486,6 +486,18 @@ int launchJVM(NSString *username, id launchTarget, int width, int height, int mi
     // Disable Forge 1.16.x early progress window
     margv[++margc] = "-Dfml.earlyprogresswindow=false";
 
+    // JNA on iOS must load libjnidispatch from jna.boot.library.path
+    // (jna.nosys=true), so pre-copy the bundled 5.13.0 dylib into jna_tmp.
+    // POJAV_HOME/jna_tmp is what PojavLauncher.main points jna.boot.library.path at.
+    NSString *jnaTmpDir = [NSString stringWithFormat:@"%s/jna_tmp", getenv("POJAV_HOME")];
+    [fm createDirectoryAtPath:jnaTmpDir withIntermediateDirectories:YES attributes:nil error:nil];
+    NSString *jnidispatchSrc = [NSBundle.mainBundle.bundlePath stringByAppendingPathComponent:@"Frameworks/libjnidispatch.dylib"];
+    NSString *jnidispatchDst = [jnaTmpDir stringByAppendingPathComponent:@"libjnidispatch.dylib"];
+    if ([fm fileExistsAtPath:jnidispatchSrc] && ![fm fileExistsAtPath:jnidispatchDst]) {
+        NSLog(@"[JavaLauncher] Copying libjnidispatch.dylib to %@", jnidispatchDst);
+        [fm copyItemAtPath:jnidispatchSrc toPath:jnidispatchDst error:nil];
+    }
+
     // Load java
     NSString *libjlipath8 = [NSString stringWithFormat:@"%@/lib/jli/libjli.dylib", javaHome]; // java 8
     NSString *libjlipath11 = [NSString stringWithFormat:@"%@/lib/libjli.dylib", javaHome]; // java 11+
