@@ -10,7 +10,7 @@ TARGETS := $(TARGETS:$(SOURCEDIR)/%=$(OUTPUTDIR)/%.jar)
 TARGETS += $(OUTPUTDIR)/lwjgl-3.3.3.jar $(OUTPUTDIR)/lwjgl-3.3.6.jar $(OUTPUTDIR)/lwjgl-3.4.1.jar $(OUTPUTDIR)/cacio-init-agent.jar
 
 # Add all jars to classpath and allow compiling with private API
-JCFLAGS := -cp "$(subst $() $(),:,$(wildcard $(SOURCEDIR)/*/):$(wildcard libs/*/*.jar):$(wildcard ../lwgjl/lwjgl3-wip-rebase_3.4.1/bin/libs/java/jspecify.jar))" -XDignore.symbol.file
+JCFLAGS := -cp "$(subst $() $(),:,$(wildcard $(SOURCEDIR)/*/):$(wildcard libs/*/*.jar))" -XDignore.symbol.file
 
 all: $(TARGETS)
 	
