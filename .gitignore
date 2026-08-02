@@ -19,7 +19,11 @@ entitlements.codesign.xml
 
 # Build artifacts (users can build themselves)
 /amethyst-prebuilt-libraries/build/
-/amethyst-prebuilt-libraries/SDL/SDL3/build_ios/
+# SDL3 build dir is ignored, but the resulting iOS dylibs must be committed
+# (the payload step copies them into the app and CI can't build them)
+/amethyst-prebuilt-libraries/SDL/SDL3/build_ios/*
+!/amethyst-prebuilt-libraries/SDL/SDL3/build_ios/libSDL3.dylib
+!/amethyst-prebuilt-libraries/SDL/SDL3/build_ios/libSDL3.0.dylib
 /lwgjl/*/bin/
 /lwgjl/*/.gradle/
 /lwgjl/*/.github/workflows/android/.gradle/
