@@ -14,6 +14,7 @@ import org.lwjgl.glfw.CallbackBridge;
 import org.lwjgl.glfw.GLFW;
 
 import net.kdt.pojavlaunch.uikit.*;
+import net.kdt.pojavlaunch.touchcontroller.TouchControllerManager;
 import net.kdt.pojavlaunch.utils.*;
 import net.kdt.pojavlaunch.value.*;
 
@@ -224,6 +225,15 @@ public class PojavLauncher {
         String sizeStr = System.getProperty("cacio.managed.screensize");
         System.setProperty("glfw.windowSize", sizeStr);
         String[] size = sizeStr.split("x");
+        // Initialize the TouchController proxy (dormant until here).
+        // Must run in the launcher's classloader, before the game main class,
+        // so the shared ring-buffer transport and JNI refs are ready.
+        try {
+            TouchControllerManager.getInstance().initialize(
+                Integer.parseInt(size[0]), Integer.parseInt(size[1]));
+        } catch (Throwable t) {
+            System.err.println("[TouchController] initialize failed (optional): " + t);
+        }
         MCOptionUtils.load();
         MCOptionUtils.set("fullscreen", "false");
         MCOptionUtils.set("overrideWidth", size[0]);

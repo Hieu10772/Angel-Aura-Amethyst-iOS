@@ -4,9 +4,8 @@ package net.kdt.pojavlaunch.touchcontroller;
  * iOS Vibration handler using UIImpactFeedbackGenerator
  */
 public class IosVibrationHandler implements LauncherProxyClient.VibrationHandler {
-    static {
-        System.loadLibrary("touchcontroller_launcher");
-    }
+    // JNI natives live in the main executable (System.load'ed at startup,
+    // see UIKit.java); no separate library to load here.
 
     public enum VibrateType {
         LIGHT(0),      // UIImpactFeedbackStyleLight

@@ -11,18 +11,18 @@ public abstract class ProxyMessage {
         if (type == null) return null;
         
         switch (type) {
-            case INITIALIZE:
-                return InitializeMessage.decode(buffer);
-            case CAPABILITY:
-                return CapabilityMessage.decode(buffer);
             case ADD_POINTER:
                 return AddPointerMessage.decode(buffer);
             case REMOVE_POINTER:
                 return RemovePointerMessage.decode(buffer);
             case CLEAR_POINTER:
                 return ClearPointerMessage.decode(buffer);
-            case MOVE_VIEW:
-                return MoveViewMessage.decode(buffer);
+            case VIBRATE:
+                return VibrateMessage.decode(buffer);
+            case CAPABILITY:
+                return CapabilityMessage.decode(buffer);
+            case LARGE_MESSAGE:
+                return LargeMessage.decode(buffer);
             case INPUT_STATUS:
                 return InputStatusMessage.decode(buffer);
             case INPUT_CURSOR:
@@ -31,8 +31,10 @@ public abstract class ProxyMessage {
                 return InputAreaMessage.decode(buffer);
             case KEYBOARD_SHOW:
                 return KeyboardShowMessage.decode(buffer);
-            case VIBRATE:
-                return VibrateMessage.decode(buffer);
+            case INITIALIZE:
+                return InitializeMessage.decode(buffer);
+            case MOVE_VIEW:
+                return MoveViewMessage.decode(buffer);
             default:
                 return null;
         }

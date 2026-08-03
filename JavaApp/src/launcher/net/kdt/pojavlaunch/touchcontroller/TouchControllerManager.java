@@ -1,6 +1,5 @@
 package net.kdt.pojavlaunch.touchcontroller;
 
-import net.kdt.pojavlaunch.uikit.UIKit;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Set;
@@ -9,17 +8,21 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * Main manager for TouchController integration in the Amethyst iOS launcher.
  * Handles communication between the launcher (touch input) and the mod (game).
+ *
+ * The touch entry points (onTouchDown/Move/Up/Cancel/ViewMove) are static
+ * because they are invoked from native code (touchcontroller_jni_bridge.c)
+ * via GetStaticMethodID.
  */
 public class TouchControllerManager {
     private static final String TAG = "TouchControllerManager";
-    
+
     private static volatile TouchControllerManager instance;
     private LauncherProxyClient proxyClient;
     private IosSocketTransport transport;
     private boolean initialized = false;
     private int gameWidth = 0;
     private int gameHeight = 0;
-    
+
     // Touch tracking
     private final ConcurrentHashMap<Integer, TouchPoint> activeTouches = new ConcurrentHashMap<>();
     private int nextPointerIndex = 1;
@@ -39,7 +42,7 @@ public class TouchControllerManager {
 
     /**
      * Initialize TouchController before launching Minecraft.
-     * Must be called before JLI_Launch.
+     * Must be called before the game main class is loaded.
      */
     public void initialize(int width, int height) {
         if (initialized) {
@@ -49,39 +52,32 @@ public class TouchControllerManager {
 
         this.gameWidth = width;
         this.gameHeight = height;
-        
-        String socketName = "Amethyst-iOS";
-        
-        // Set environment variable for the mod to find the socket
-        System.setProperty("TOUCH_CONTROLLER_PROXY_SOCKET", socketName);
-        
+
         try {
             // Create iOS transport (JNI to native ring buffer)
-            transport = IosSocketTransport.create(socketName);
-            
-            // Create proxy client with capabilities
+            transport = IosSocketTransport.create();
+
+            // Create proxy client with capabilities understood by the mod
             proxyClient = new LauncherProxyClient(transport, new HashSet<>(Arrays.asList(
-                LauncherProxyClient.PlatformCapability.TOUCH,
-                LauncherProxyClient.PlatformCapability.VIBRATION,
                 LauncherProxyClient.PlatformCapability.TEXT_STATUS,
                 LauncherProxyClient.PlatformCapability.KEYBOARD_SHOW
             )));
-            
+
             // Set vibration handler (iOS haptics)
             proxyClient.setVibrationHandler(new IosVibrationHandler());
-            
+
             // Set input handler (keyboard show/hide)
             proxyClient.setInputHandler(new IosInputHandler());
-            
+
             // Set keyboard show handler
             proxyClient.setKeyboardShowHandler(IosKeyboardShowHandler.getInstance());
-            
+
             // Start the proxy client (starts message processing thread)
             proxyClient.run();
-            
+
             initialized = true;
-            System.out.println(TAG + ": TouchController initialized with socket: " + socketName);
-            
+            System.out.println(TAG + ": TouchController initialized, size=" + width + "x" + height);
+
         } catch (Exception e) {
             System.err.println(TAG + ": Failed to initialize TouchController: " + e.getMessage());
             e.printStackTrace();
@@ -95,59 +91,61 @@ public class TouchControllerManager {
      * @param y Normalized Y coordinate [0, 1] relative to game view
      * @return Pointer index assigned to this touch
      */
-    public int onTouchDown(float x, float y) {
-        if (!initialized || proxyClient == null) return -1;
-        
-        int index = nextPointerIndex++;
-        activeTouches.put(index, new TouchPoint(x, y));
-        proxyClient.addPointer(index, x, y);
-        System.out.println(TAG + ": Touch down index=" + index + " x=" + x + " y=" + y);
+    public static int onTouchDown(float x, float y) {
+        TouchControllerManager manager = getInstance();
+        if (!manager.initialized || manager.proxyClient == null) return -1;
+
+        int index = manager.nextPointerIndex++;
+        manager.activeTouches.put(index, new TouchPoint(x, y));
+        manager.proxyClient.addPointer(index, x, y);
         return index;
     }
 
     /**
      * Called when a touch moves.
      */
-    public void onTouchMove(int index, float x, float y) {
-        if (!initialized || proxyClient == null) return;
-        
-        TouchPoint point = activeTouches.get(index);
+    public static void onTouchMove(int index, float x, float y) {
+        TouchControllerManager manager = getInstance();
+        if (!manager.initialized || manager.proxyClient == null) return;
+
+        TouchPoint point = manager.activeTouches.get(index);
         if (point != null) {
             point.x = x;
             point.y = y;
-            proxyClient.addPointer(index, x, y);
+            manager.proxyClient.addPointer(index, x, y);
         }
     }
 
     /**
      * Called when a touch ends.
      */
-    public void onTouchUp(int index) {
-        if (!initialized || proxyClient == null) return;
-        
-        activeTouches.remove(index);
-        proxyClient.removePointer(index);
-        System.out.println(TAG + ": Touch up index=" + index);
+    public static void onTouchUp(int index) {
+        TouchControllerManager manager = getInstance();
+        if (!manager.initialized || manager.proxyClient == null) return;
+
+        manager.activeTouches.remove(index);
+        manager.proxyClient.removePointer(index);
     }
 
     /**
      * Called when all touches are cancelled.
      */
-    public void onTouchCancel() {
-        if (!initialized || proxyClient == null) return;
-        
-        activeTouches.clear();
-        proxyClient.clearPointer();
-        System.out.println(TAG + ": Touch cancel - all pointers cleared");
+    public static void onTouchCancel() {
+        TouchControllerManager manager = getInstance();
+        if (!manager.initialized || manager.proxyClient == null) return;
+
+        manager.activeTouches.clear();
+        manager.proxyClient.clearPointer();
     }
 
     /**
      * Handle view movement (drag on screen for camera rotation).
      */
-    public void onViewMove(float deltaPitch, float deltaYaw) {
-        if (!initialized || proxyClient == null) return;
-        
-        proxyClient.moveView(true, deltaPitch, deltaYaw);
+    public static void onViewMove(float deltaPitch, float deltaYaw) {
+        TouchControllerManager manager = getInstance();
+        if (!manager.initialized || manager.proxyClient == null) return;
+
+        manager.proxyClient.moveView(true, deltaPitch, deltaYaw);
     }
 
     /**
@@ -156,7 +154,6 @@ public class TouchControllerManager {
     public void updateGameSize(int width, int height) {
         this.gameWidth = width;
         this.gameHeight = height;
-        // Could send InputAreaMessage to mod if needed
     }
 
     public boolean isInitialized() {

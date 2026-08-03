@@ -2,6 +2,10 @@ package net.kdt.pojavlaunch.touchcontroller;
 
 import java.nio.ByteBuffer;
 
+/**
+ * Vibration message. Wire kinds follow the current TouchController protocol:
+ * 0 = BLOCK_BROKEN, anything else = UNKNOWN.
+ */
 public final class VibrateMessage extends ProxyMessage {
     public enum Kind {
         LIGHT(0), MEDIUM(1), HEAVY(2), SELECTION(3);
@@ -30,7 +34,9 @@ public final class VibrateMessage extends ProxyMessage {
     }
 
     public static VibrateMessage decode(ByteBuffer buffer) {
-        Kind kind = Kind.fromInt(buffer.getInt());
-        return new VibrateMessage(kind);
+        int kind = buffer.getInt();
+        // Mod only sends 0 (BLOCK_BROKEN) or -1 (UNKNOWN). Map to haptic styles.
+        Kind mapped = kind == 0 ? Kind.LIGHT : Kind.SELECTION;
+        return new VibrateMessage(mapped);
     }
 }
