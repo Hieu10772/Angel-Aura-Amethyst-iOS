@@ -68,6 +68,13 @@ static GameSurfaceView* pojavWindow;
 
 @end
 
+// deltaX/deltaY were removed from the public UIEvent.h in the iOS 26 SDK
+// but still exist at runtime (iOS 13.4+); they carry pointer-lock deltas.
+@interface UIEvent (AmethystPointerLockDelta)
+@property (nonatomic, readonly) CGFloat deltaX;
+@property (nonatomic, readonly) CGFloat deltaY;
+@end
+
 @implementation SurfaceViewController
 
 - (instancetype)initWithMetadata:(NSDictionary *)metadata {
@@ -1139,6 +1146,14 @@ int touchesMovedCount;
     int i = 0;
     for (UITouch *touch in touches) {
         if (touch.type == UITouchTypeIndirectPointer) {
+            if (isGrabbing) {
+                if (event.buttonMask & UIEventButtonMaskPrimary) {
+                    CallbackBridge_nativeSendMouseButton(GLFW_MOUSE_BUTTON_LEFT, 1, 0);
+                }
+                if (event.buttonMask & UIEventButtonMaskSecondary) {
+                    CallbackBridge_nativeSendMouseButton(GLFW_MOUSE_BUTTON_RIGHT, 1, 0);
+                }
+            }
             continue; // handle this in a different place
         }
         CGPoint locationInView = [touch locationInView:self.rootView];
@@ -1163,7 +1178,14 @@ int touchesMovedCount;
 
     for (UITouch *touch in touches) {
         if (touch.type == UITouchTypeIndirectPointer) {
-            if (!isGrabbing && !virtualMouseEnabled) {
+            if (isGrabbing) {
+                // Pointer lock is active: deliver system pointer deltas to the game
+                CGFloat dx = event.deltaX;
+                CGFloat dy = event.deltaY;
+                if (dx != 0.0 || dy != 0.0) {
+                    [self sendTouchPoint:CGPointMake(dx, dy) withEvent:ACTION_MOVE_MOTION];
+                }
+            } else if (!virtualMouseEnabled) {
                 CGPoint point = [touch locationInView:self.rootView];
                 [self sendTouchPoint:point withEvent:ACTION_MOVE];
             }
@@ -1183,6 +1205,14 @@ int touchesMovedCount;
 {
     for (UITouch *touch in touches) {
         if (touch.type == UITouchTypeIndirectPointer) {
+            if (isGrabbing) {
+                if (event.buttonMask & UIEventButtonMaskPrimary) {
+                    CallbackBridge_nativeSendMouseButton(GLFW_MOUSE_BUTTON_LEFT, 0, 0);
+                }
+                if (event.buttonMask & UIEventButtonMaskSecondary) {
+                    CallbackBridge_nativeSendMouseButton(GLFW_MOUSE_BUTTON_RIGHT, 0, 0);
+                }
+            }
             continue; // handle this in a different place
         }
         [self sendTouchEvent:touch withUIEvent:event withEvent:ACTION_UP];
