@@ -793,11 +793,7 @@ static GameSurfaceView* pojavWindow;
 }
 
 - (BOOL)prefersPointerLocked {
-    return YES;
-}
-
-- (UIViewController *)childViewControllerForPointerLock {
-    return self;
+    return isGrabbing;
 }
 
 #pragma mark - UIPointerInteractionDelegate
