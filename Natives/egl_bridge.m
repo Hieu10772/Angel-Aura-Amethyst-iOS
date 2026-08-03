@@ -80,7 +80,7 @@ int pojavInitOpenGL() {
         NSString *vkPath = [NSBundle.mainBundle.privateFrameworksPath stringByAppendingPathComponent:@"libvulkan.1.dylib"];
         dlopen(vkPath.UTF8String, RTLD_LAZY | RTLD_GLOBAL);
         set_osm_bridge_tbl();
-    } else if ([renderer isEqualToString:@ RENDERER_NAME_VULKAN]) {
+    } else if ([renderer isEqualToString:@ RENDERER_NAME_MOLTENVK]) {
         set_vk_bridge_tbl();
     }
     JNI_LWJGL_changeRenderer(renderer.UTF8String);

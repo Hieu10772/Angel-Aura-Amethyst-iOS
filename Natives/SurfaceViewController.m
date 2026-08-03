@@ -34,7 +34,7 @@ int memorystatus_control(uint32_t command, int32_t pid, uint32_t flags, void *bu
 static int currentHotbarSlot = -1;
 static GameSurfaceView* pojavWindow;
 
-@interface SurfaceViewController ()<UITextFieldDelegate, UIGestureRecognizerDelegate> {
+@interface SurfaceViewController ()<UITextFieldDelegate, UIGestureRecognizerDelegate, UIPointerInteractionDelegate> {
     // TouchController integration
     NSUInteger nextTouchControllerIndex;
     NSMutableDictionary<UITouch*, NSNumber*>* touchControllerIndexMap;
@@ -210,6 +210,9 @@ static GameSurfaceView* pojavWindow;
     self.mousePointerView.userInteractionEnabled = NO;
     [self.touchView addSubview:self.mousePointerView];
 
+    UIPointerInteraction *pointerInteraction = [[UIPointerInteraction alloc] initWithDelegate:self];
+    [self.touchView addInteraction:pointerInteraction];
+
     self.inputTextField = [[TrackedTextField alloc] initWithFrame:CGRectMake(0, -32.0, self.view.frame.size.width, 30.0)];
     self.inputTextField.backgroundColor = UIColor.secondarySystemBackgroundColor;
     self.inputTextField.delegate = self;
@@ -234,6 +237,8 @@ static GameSurfaceView* pojavWindow;
         GCMouse* mouse = note.object;
         [self registerMouseCallbacks:mouse];
         virtualMouseEnabled = YES;
+        [self becomeFirstResponder];
+        [self.view becomeFirstResponder];
     self.mousePointerView.hidden = isGrabbing;
         [self setNeedsUpdateOfPrefersPointerLocked];
     }];
@@ -245,6 +250,8 @@ static GameSurfaceView* pojavWindow;
         mouse.mouseInput.middleButton.pressedChangedHandler = nil;
         mouse.mouseInput.rightButton.pressedChangedHandler = nil;
         [mouse.mouseInput.auxiliaryButtons makeObjectsPerformSelector:@selector(setPressedChangedHandler:) withObject:nil];
+        [self becomeFirstResponder];
+        [self.view becomeFirstResponder];
         [self setNeedsUpdateOfPrefersPointerLocked];
         if (getPrefBool(@"control.hardware_hide")) {
             self.ctrlView.hidden = NO;
@@ -300,6 +307,8 @@ static GameSurfaceView* pojavWindow;
 
 - (void)viewDidAppear:(BOOL)animated {
     [super viewDidAppear:animated];
+    [self becomeFirstResponder];
+    [self.view becomeFirstResponder];
     [self setNeedsUpdateOfPrefersPointerLocked];
 }
 
@@ -439,6 +448,8 @@ static GameSurfaceView* pojavWindow;
         }
     }
     // Update pointer lock state
+    [self becomeFirstResponder];
+    [self.view becomeFirstResponder];
     [self setNeedsUpdateOfPrefersPointerLocked];
 }
 
@@ -500,6 +511,8 @@ static GameSurfaceView* pojavWindow;
     }
     self.scrollPanGesture.enabled = !isGrabbing;
     self.mousePointerView.hidden = isGrabbing || !virtualMouseEnabled;
+    [self becomeFirstResponder];
+    [self.view becomeFirstResponder];
     [self setNeedsUpdateOfPrefersPointerLocked];
 
     // Update buttons visibility
@@ -780,7 +793,21 @@ static GameSurfaceView* pojavWindow;
 }
 
 - (BOOL)prefersPointerLocked {
-    return GCMouse.mice.count > 0 && (isGrabbing || virtualMouseEnabled);
+    return YES;
+}
+
+- (UIViewController *)childViewControllerForPointerLock {
+    return self;
+}
+
+#pragma mark - UIPointerInteractionDelegate
+
+- (UIPointerRegion *)pointerInteraction:(UIPointerInteraction *)interaction regionForRequest:(UIPointerRegionRequest *)request defaultRegion:(UIPointerRegion *)defaultRegion {
+    return defaultRegion;
+}
+
+- (UIPointerStyle *)pointerInteraction:(UIPointerInteraction *)interaction styleForRegion:(UIPointerRegion *)region {
+    return isGrabbing ? [UIPointerStyle hiddenPointerStyle] : nil;
 }
 
 - (void)registerMouseCallbacks:(GCMouse *)mouse {
@@ -1008,6 +1035,8 @@ static GameSurfaceView* pojavWindow;
                         virtualMouseEnabled = !virtualMouseEnabled;
                         self.mousePointerView.hidden = !virtualMouseEnabled;
                         setPrefBool(@"control.virtmouse_enable", virtualMouseEnabled);
+                        [self becomeFirstResponder];
+                        [self.view becomeFirstResponder];
                         [self setNeedsUpdateOfPrefersPointerLocked];
                     }
                     break;

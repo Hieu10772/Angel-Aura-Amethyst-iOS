@@ -105,7 +105,7 @@
         ]},
         @{@"title": localize(@"Zink", nil), @"items": @[
             @{@"type": @"picker", @"label": localize(@"Optimization Level", nil), @"key": @"zink.optimization_level", @"options": zinkOptLevels, @"default": @"-1"},
-            @{@"type": @"picker", @"label": localize(@"preference.title.zink_gl_override", nil), @"key": @"zink.gl_override", @"options": @[@"0", @"3.3", @"4.0", @"4.1"], @"default": @"0"},
+            @{@"type": @"picker", @"label": localize(@"preference.title.zink_gl_override", nil), @"key": @"zink.gl_override", @"options": @[@"0", @"3.3", @"4.0", @"4.1", @"4.3", @"4.6"], @"default": @"0"},
             @{@"type": @"switch", @"label": localize(@"preference.title.zink_enable_gl_thread", nil), @"key": @"zink.enable_gl_thread"},
             @{@"type": @"slider", @"label": localize(@"preference.title.zink_glsl_cache_size", nil), @"key": @"zink.glsl_cache_size", @"min": @8, @"max": @512, @"suffix": @"MB"},
             @{@"type": @"picker", @"label": localize(@"preference.title.zink_api_features", nil), @"key": @"zink.api_features", @"options": @[@"0", @"1", @"2", @"3"], @"default": @"3"},

@@ -144,7 +144,7 @@ NSArray* getRendererKeys(BOOL containsDefault) {
         @ RENDERER_NAME_MOBILEGLUES,
         @ RENDERER_NAME_LTW,
         @ RENDERER_NAME_VK_ZINK,
-        @ RENDERER_NAME_VULKAN
+        @ RENDERER_NAME_MOLTENVK
     ].mutableCopy;
 
     if (containsDefault) {

@@ -228,7 +228,7 @@
 "preference.title.renderer.debug.angle" = "ANGLE (1.17+) - exports OpenGL 3.2 (Core Profile, limited)";
 "preference.title.renderer.debug.mg" = "MobileGlues (1.17+) - exports OpenGL 4.0, EXPERIMENTAL";
 "preference.title.renderer.debug.zink" = "Zink (Mesa 25) - exports OpenGL 4.1 via MoltenVK";
-"preference.title.renderer.debug.vulkan" = "MoltenVK - native Vulkan via Metal (1.21.6+ snapshots only)";
+"preference.title.renderer.debug.vulkan" = "MoltenVK (Vulkan -> Metal direct)";
 "preference.title.renderer.debug.ltw" = "LTW (1.17+) - OpenGL 3.3 via OpenGL ES/Metal, EXPERIMENTAL";
 
 "Device Info" = "Device Info";

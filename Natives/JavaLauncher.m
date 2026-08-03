@@ -99,6 +99,10 @@ void init_loadDefaultEnv() {
     // Suppress [mvk-info] log spam (swapchain creation, etc.)
     setenv("MVK_CONFIG_LOG_LEVEL", "2", 1);
 
+    // MoltenVK 1.4.1 argument buffers break chunk lightmap texelFetch on A11
+    // (world renders dark). Disable to keep lighting correct.
+    setenv("MVK_CONFIG_USE_METAL_ARGUMENT_BUFFERS", "0", 1);
+
     // Runs JVM in a separate thread
     setenv("HACK_IGNORE_START_ON_FIRST_THREAD", "1", 1);
 }
@@ -124,7 +128,7 @@ void init_loadMobileGluesConfig() {
     NSString *renderer = [PLProfiles resolveKeyForCurrentProfile:@"renderer"];
     BOOL usesMobileGlues = [renderer isEqualToString:@ RENDERER_NAME_MOBILEGLUES] ||
         [renderer isEqualToString:@"auto"] ||
-        [renderer isEqualToString:@ RENDERER_NAME_VULKAN];
+        [renderer isEqualToString:@ RENDERER_NAME_MOLTENVK];
 
     if (!usesMobileGlues) {
         return;
@@ -413,6 +417,9 @@ int launchJVM(NSString *username, id launchTarget, int width, int height, int mi
     margv[++margc] = "-Dorg.lwjgl.system.allocator=system";
     //margv[++margc] = "-Dorg.lwjgl.util.NoChecks=true";
     margv[++margc] = "-Dlog4j2.formatMsgNoLookups=true";
+    // Voxy on iOS: cap geometry buffer at 256MB (iPhone 8 has 2GB RAM; Voxy
+    // defaults to a 3.7GB SSBO allocation which fails with GL_OUT_OF_MEMORY)
+    margv[++margc] = "-Dvoxy.geometryBufferSizeOverrideMB=256";
 
     // Preset OpenGL libname
     const char *glLibName = getenv("AMETHYST_RENDERER");
@@ -439,12 +446,7 @@ int launchJVM(NSString *username, id launchTarget, int width, int height, int mi
         // a GL entry point (compat code, shader build, etc.) MobileGlues can
         // route it through Vulkan rather than crashing like a context-less
         // gl4es would.
-        if (strcmp(glLibName, RENDERER_NAME_VULKAN) == 0) {
-            setenv("MVK_CONFIG_RESUME_LOST_DEVICE", "1", 1);
-            setenv("MVK_CONFIG_SYNCHRONOUS_QUEUE_SUBMITS", "1", 1);
-            setenv("MVK_CONFIG_PREFILL_METAL_COMMAND_BUFFERS", "1", 1);
-        }
-        const char *openglLibName = (strcmp(glLibName, RENDERER_NAME_VULKAN) == 0)
+        const char *openglLibName = (strcmp(glLibName, RENDERER_NAME_MOLTENVK) == 0)
             ? RENDERER_NAME_MOBILEGLUES
             : glLibName;
         margv[++margc] = [NSString stringWithFormat:@"-Dorg.lwjgl.opengl.libname=%s", openglLibName].UTF8String;

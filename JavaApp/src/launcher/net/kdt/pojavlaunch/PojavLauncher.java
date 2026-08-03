@@ -233,6 +233,12 @@ public class PojavLauncher {
         MCOptionUtils.setDefault("particles", "1");
         MCOptionUtils.setDefault("renderDistance", "2");
         MCOptionUtils.setDefault("simulationDistance", "5");
+        // MoltenVK renderer = direct Vulkan → MoltenVK → Metal, no GL. Force the
+        // game's preferredGraphicsBackend to "vulkan" (values: default/vulkan/opengl)
+        // so MC 26.x doesn't fall back to its OpenGL backend.
+        if ("libMoltenVK.dylib".equals(System.getenv("AMETHYST_RENDERER"))) {
+            MCOptionUtils.set("preferredGraphicsBackend", "vulkan");
+        }
         MCOptionUtils.save();
 
         // Setup Forge splash.properties

@@ -192,6 +192,10 @@
     } completion:nil];
 }
 
+- (UIViewController *)childViewControllerForPointerLock {
+    return self.currentContentVC;
+}
+
 - (void)switchContentTo:(UIViewController *)vc animated:(BOOL)animated {
     if (self.currentContentVC == vc) return;
 

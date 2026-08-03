@@ -12,9 +12,9 @@
 static vk_render_window_t g_dummy;
 
 static bool vk_init(void) {
-    void* h = dlopen("@rpath/" RENDERER_NAME_VULKAN, RTLD_GLOBAL);
+    void* h = dlopen("@rpath/" RENDERER_NAME_MOLTENVK, RTLD_GLOBAL);
     if (!h) {
-        NSLog(@"VKBridge: dlopen %s failed: %s", RENDERER_NAME_VULKAN, dlerror());
+        NSLog(@"VKBridge: dlopen %s failed: %s", RENDERER_NAME_MOLTENVK, dlerror());
         return false;
     }
     return true;

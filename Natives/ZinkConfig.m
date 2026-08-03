@@ -477,6 +477,37 @@ static AppleGPUGeneration _cachedGPUGeneration = AppleGPUGenerationUnknown;
         } else if ([verStr isEqualToString:@"4.1"]) {
             setenv("MESA_GL_VERSION_OVERRIDE", "4.1", 1);
             setenv("MESA_GLSL_VERSION_OVERRIDE", "410", 1);
+        } else if ([verStr isEqualToString:@"4.3"]) {
+            setenv("MESA_GL_VERSION_OVERRIDE", "4.3", 1);
+            setenv("MESA_GLSL_VERSION_OVERRIDE", "430", 1);
+        } else if ([verStr isEqualToString:@"4.6"]) {
+            setenv("MESA_GL_VERSION_OVERRIDE", "4.6", 1);
+            setenv("MESA_GLSL_VERSION_OVERRIDE", "460", 1);
+        }
+
+        // GL 4.3+ (user requested compute-capable profile). The optimization
+        // level may have disabled GL_ARB_compute_shader (e.g. Medium on A11)
+        // to reduce memory pressure, which silently breaks any GL 4.3+
+        // compute consumer such as Voxy: its Capabilities probe reads
+        // glDispatchComputeIndirect == NULL and reports itself unsupported.
+        // Force-enable compute and indirect-draw-count extensions so a
+        // 4.3/4.6 override behaves as advertised and Voxy can run.
+        if ([verStr isEqualToString:@"4.3"] || [verStr isEqualToString:@"4.6"]) {
+            const char *origOverride = getenv("MESA_EXTENSION_OVERRIDE");
+            NSString *extOverride = origOverride ? [NSString stringWithUTF8String:origOverride] : @"";
+            NSArray *tokens = [extOverride componentsSeparatedByString:@" "];
+            NSMutableArray *cleanTokens = [NSMutableArray array];
+            for (NSString *token in tokens) {
+                if (token.length > 0 && ![token isEqualToString:@"-GL_ARB_compute_shader"]) {
+                    [cleanTokens addObject:token];
+                }
+            }
+            [cleanTokens addObject:@"+GL_ARB_compute_shader"];
+            [cleanTokens addObject:@"+GL_ARB_indirect_parameters"];
+            setenv("MESA_EXTENSION_OVERRIDE",
+                   [[cleanTokens componentsJoinedByString:@" "] UTF8String], 1);
+            NSLog(@"[ZinkConfig] GL 4.3+ override: compute + indirect-parameters force-enabled, MESA_EXTENSION_OVERRIDE=%@",
+                  [cleanTokens componentsJoinedByString:@" "]);
         }
     }
 

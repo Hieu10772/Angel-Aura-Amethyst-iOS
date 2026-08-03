@@ -41,3 +41,5 @@ entitlements.codesign.xml
 /lwgjl/*/libffi/build*/src/*/.dirstamp
 /lwgjl/*/libffi/build*/src/.deps/.dirstamp
 /lwgjl/*/libffi/build*/src/*/.deps/.dirstamp
+*.bak
+/Natives/OSMesaShim/bin/
