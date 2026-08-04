@@ -23,6 +23,7 @@ CGPoint lastVirtualMousePoint;
 
 - (instancetype)initWithMetadata:(NSDictionary *)metadata;
 - (instancetype)initWithJarPath:(NSString *)jarPath;
+- (instancetype)initWithJarPath:(NSString *)jarPath args:(NSArray<NSString *> *)args minJavaVersion:(int)minJavaVersion;
 - (void)sendTouchPoint:(CGPoint)location withEvent:(int)event;
 - (void)updateSavedResolution;
 - (void)updateGrabState;

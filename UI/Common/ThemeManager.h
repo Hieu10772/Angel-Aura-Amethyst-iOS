@@ -38,5 +38,6 @@ extern NSString * const ThemeDidChangeNotification;
 - (void)resetAppearance;
 - (void)broadcastThemeChange;
 - (void)updateBackgroundBlur;
+- (BOOL)isDarkMode;
 
 @end

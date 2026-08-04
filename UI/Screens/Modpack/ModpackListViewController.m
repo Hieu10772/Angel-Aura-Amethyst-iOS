@@ -6,10 +6,12 @@
 #import "AmethystProjectCell.h"
 #import "HapticManager.h"
 #import "DownloadProgressOverlay.h"
+#import "MrpackInstaller.h"
 #import "ios_uikit_bridge.h"
 
-@interface ModpackListViewController () <UITableViewDelegate, UITableViewDataSource, UISearchBarDelegate>
+@interface ModpackListViewController () <UITableViewDelegate, UITableViewDataSource, UISearchBarDelegate, UIDocumentPickerDelegate>
 @property (nonatomic) UILabel *titleLabel;
+@property (nonatomic) UIButton *importButton;
 @property (nonatomic) UISearchBar *searchBar;
 @property (nonatomic) UITableView *tableView;
 @property (nonatomic) NSMutableArray *modpacks;
@@ -48,6 +50,14 @@
     _titleLabel.font = [UIFont systemFontOfSize:22 weight:UIFontWeightBold];
     _titleLabel.text = @"Modpacks";
     [self.view addSubview:_titleLabel];
+
+    _importButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    _importButton.translatesAutoresizingMaskIntoConstraints = NO;
+    [_importButton setTitle:@"Import .mrpack" forState:UIControlStateNormal];
+    [_importButton setImage:[UIImage systemImageNamed:@"square.and.arrow.down"] forState:UIControlStateNormal];
+    _importButton.titleLabel.font = [UIFont systemFontOfSize:13 weight:UIFontWeightSemibold];
+    [_importButton addTarget:self action:@selector(importMrpack) forControlEvents:UIControlEventTouchUpInside];
+    [self.view addSubview:_importButton];
 
     _searchBar = [[UISearchBar alloc] init];
     _searchBar.translatesAutoresizingMaskIntoConstraints = NO;
@@ -89,6 +99,10 @@
         [_titleLabel.topAnchor constraintEqualToAnchor:self.view.topAnchor constant:16],
         [_titleLabel.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:20],
 
+        [_importButton.centerYAnchor constraintEqualToAnchor:_titleLabel.centerYAnchor],
+        [_importButton.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-16],
+        [_importButton.heightAnchor constraintEqualToConstant:30],
+
         [_searchBar.topAnchor constraintEqualToAnchor:_titleLabel.bottomAnchor constant:8],
         [_searchBar.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:12],
         [_searchBar.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-12],
@@ -112,9 +126,50 @@
     ThemeManager *theme = ThemeManager.shared;
     self.view.backgroundColor = theme.contentBackgroundColor;
     _titleLabel.textColor = theme.primaryTextColor;
+    _importButton.tintColor = theme.accentColor;
     _searchBar.searchTextField.textColor = theme.primaryTextColor;
     _searchBar.tintColor = theme.accentColor;
     _emptyLabel.textColor = theme.secondaryTextColor;
+}
+
+#pragma mark - Import local .mrpack
+
+- (void)importMrpack {
+    UIDocumentPickerViewController *picker = [[UIDocumentPickerViewController alloc] initWithDocumentTypes:@[@"public.data"] inMode:UIDocumentPickerModeImport];
+    picker.delegate = self;
+    picker.allowsMultipleSelection = NO;
+    [self presentViewController:picker animated:YES completion:nil];
+}
+
+- (void)documentPicker:(UIDocumentPickerViewController *)controller didPickDocumentsAtURLs:(NSArray<NSURL *> *)urls {
+    NSURL *url = urls.firstObject;
+    if (!url) return;
+
+    [url startAccessingSecurityScopedResource];
+
+    NSString *docsDir = [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES) firstObject];
+    NSString *importDir = [docsDir stringByAppendingPathComponent:@"ImportedModpacks"];
+    [[NSFileManager defaultManager] createDirectoryAtPath:importDir withIntermediateDirectories:YES attributes:nil error:nil];
+
+    NSString *destPath = [importDir stringByAppendingPathComponent:url.lastPathComponent];
+    if ([[NSFileManager defaultManager] fileExistsAtPath:destPath]) {
+        NSString *base = [url.lastPathComponent stringByDeletingPathExtension];
+        NSString *ext = [url.lastPathComponent pathExtension];
+        NSString *timestamp = [NSString stringWithFormat:@"%.0f", [[NSDate date] timeIntervalSince1970]];
+        destPath = [importDir stringByAppendingPathComponent:[NSString stringWithFormat:@"%@_%@.%@", base, timestamp, ext]];
+    }
+
+    NSError *error = nil;
+    if ([[NSFileManager defaultManager] copyItemAtURL:url toURL:[NSURL fileURLWithPath:destPath] error:&error]) {
+        [url stopAccessingSecurityScopedResource];
+        // The installer parses modrinth.index.json and downloads every file listed
+        // inside, extracts overrides and sets up loaders, exactly like a Modrinth
+        // download. The imported copy is deleted on completion.
+        [MrpackInstaller installMrpackAtPath:destPath title:nil hostVC:self removeOnCompletion:YES];
+    } else {
+        [url stopAccessingSecurityScopedResource];
+        showDialog(@"Import Failed", error.localizedDescription ?: @"Unknown error");
+    }
 }
 
 - (void)loadModpacksWithQuery:(NSString *)query offset:(NSInteger)offset {

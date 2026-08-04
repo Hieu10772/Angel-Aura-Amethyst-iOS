@@ -223,70 +223,33 @@ Java_net_kdt_pojavlaunch_touchcontroller_IosSocketTransport_nativeClose(JNIEnv* 
 }
 
 // ===== JNI: game-side transport (top.fifthlight...ios.Transport) =====
+//
+// NOTE: these stubs live in the main executable (touchcontroller_game_bridge.c),
+// NOT in this dylib: the game runs in the Knot classloader and resolves them
+// against AngelAuraAmethyst, which only Knot System.load()s. If they were
+// here, the launcher's System.load() of this dylib would register them with
+// the launcher classloader and the game would fail to resolve them.
 
-JNIEXPORT void JNICALL
-Java_top_fifthlight_touchcontroller_common_platform_ios_Transport_init(JNIEnv* env, jclass clazz) {
-    if (ensure_queue() == NULL) {
-        throw_exception(env, "Failed to initialize queue");
-    }
+// ===== JNI: vibration & keyboard (unchanged) =====
+
+int touchcontroller_queue_ensure(void) {
+    return ensure_queue() != NULL ? 0 : -1;
 }
 
-JNIEXPORT jint JNICALL
-Java_top_fifthlight_touchcontroller_common_platform_ios_Transport_receive(JNIEnv* env, jclass clazz, jbyteArray buffer) {
-    queue_t* queue = ensure_queue();
-    if (queue == NULL) {
-        throw_exception(env, "Queue not initialized");
-        return 0;
-    }
-    if (buffer == NULL) {
-        throw_exception(env, "Buffer is null");
-        return 0;
-    }
-
-    jsize arrayLen = (*env)->GetArrayLength(env, buffer);
-    jbyte* data = (*env)->GetByteArrayElements(env, buffer, NULL);
-    if (data == NULL) return -1;
-
-    int result = dequeue_message(queue->launcher_to_game, &queue->launcher_to_game_mutex, data, arrayLen);
-    (*env)->ReleaseByteArrayElements(env, buffer, data, 0);
-    return result;
-}
-
-JNIEXPORT void JNICALL
-Java_top_fifthlight_touchcontroller_common_platform_ios_Transport_send(JNIEnv* env, jclass clazz, jbyteArray buffer, jint off, jint len) {
-    queue_t* queue = ensure_queue();
-    if (queue == NULL) {
-        throw_exception(env, "Queue not initialized");
-        return;
-    }
-    if (buffer == NULL) {
-        throw_exception(env, "Buffer is null");
-        return;
-    }
-    if (len <= 0 || len > MAX_MESSAGE_SIZE) {
-        throw_exception(env, "Bad message size");
-        return;
-    }
-
-    jbyte* data = (*env)->GetByteArrayElements(env, buffer, NULL);
-    if (data == NULL) return;
-    enqueue_message(queue->game_to_launcher, &queue->game_to_launcher_mutex, data + off, len);
-    (*env)->ReleaseByteArrayElements(env, buffer, data, JNI_ABORT);
-}
-
-// ===== C API (same as the mod's touchcontroller_ios_*; for launchers
-//       that prefer to push bytes directly) =====
-
+// Game-side transport: the mod runs in the Knot classloader, so these
+// functions are called from the game bridge stubs in the executable.
+//   - game SEND (Transport.send) -> launcher receives it (game_to_launcher)
+//   - game RECEIVE (Transport.receive) -> launcher sent it (launcher_to_game)
 int touchcontroller_ios_send(const void* buf, int len) {
     queue_t* queue = ensure_queue();
     if (queue == NULL) return -1;
-    return enqueue_message(queue->launcher_to_game, &queue->launcher_to_game_mutex, buf, len);
+    return enqueue_message(queue->game_to_launcher, &queue->game_to_launcher_mutex, buf, len);
 }
 
 int touchcontroller_ios_receive(void* buf) {
     queue_t* queue = ensure_queue();
     if (queue == NULL) return -1;
-    return dequeue_message(queue->game_to_launcher, &queue->game_to_launcher_mutex, buf, MAX_MESSAGE_SIZE);
+    return dequeue_message(queue->launcher_to_game, &queue->launcher_to_game_mutex, buf, MAX_MESSAGE_SIZE);
 }
 
 // ===== JNI: vibration & keyboard (unchanged) =====

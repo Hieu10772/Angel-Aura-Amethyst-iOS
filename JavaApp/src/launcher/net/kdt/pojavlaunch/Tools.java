@@ -3,6 +3,10 @@ package net.kdt.pojavlaunch;
 import android.util.ArrayMap;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
 import java.io.BufferedWriter;
@@ -138,6 +142,13 @@ public final class Tools {
     public static void launchMinecraft(MinecraftAccount profile, final JMinecraftVersionList.Version versionInfo) throws Throwable {
         System.out.println("[DEBUG] launchMinecraft: id=" + versionInfo.id + " inheritsFrom=" + versionInfo.inheritsFrom + " assets=" + versionInfo.assets + " mainClass=" + versionInfo.mainClass);
         injectVoxyMemoryStorageConfig();
+        String mainClass = versionInfo.mainClass;
+        if (mainClass != null && (mainClass.contains("fabric") || mainClass.contains("quilt"))) {
+            neutralizeFabricLwjgl(versionInfo);
+            try {
+                new File(System.getProperty("user.dir"), "logs").mkdirs();
+            } catch (Exception ignored) {}
+        }
         String[] launchArgs = getMinecraftArgs(profile, versionInfo);
         System.out.println("[DEBUG] Minecraft Args: " + Arrays.toString(launchArgs));
 
@@ -158,7 +169,6 @@ public final class Tools {
         }
 
         // Ensure Log4j libraries are accessible (needed by Fabric mods like config_manager)
-        String mainClass = versionInfo.mainClass;
         if (mainClass != null && (mainClass.contains("fabric") || mainClass.contains("quilt"))) {
             loadLog4jLibraries(loader);
         }
@@ -166,6 +176,88 @@ public final class Tools {
         Class<?> clazz = loader.loadClass(mainClass);
         Method method = clazz.getMethod("main", String[].class);
         method.invoke(null, new Object[]{launchArgs});
+    }
+
+    // Fabric/Quilt instances load Mojang's original (unpatched) LWJGL jars from
+    // the version JSON. Those crash on iOS at org.lwjgl.glfw.GLFW init
+    // (MemoryUtil -> Library.<clinit> -> System.load of liblwjgl.dylib fails,
+    // "Could not initialize class org.lwjgl.glfw.GLFW"). The bundled patched
+    // LWJGL (pure-Java, resolves native symbols from the app executable, no
+    // .dylib loading) is already on the JVM classpath, so strip org.lwjgl
+    // entries from the version JSON files Fabric reads -> Knot delegates to the
+    // launcher classloader and picks up the patched jars instead. Only touches
+    // Fabric/Quilt instance JSONs, harmless to all other instances and iOS
+    // versions. Works on first launch too (JSON files exist by then).
+    public static void neutralizeFabricLwjgl(JMinecraftVersionList.Version info) {
+        String id = info.id;
+        int guard = 0;
+        while (id != null && guard++ < 5) {
+            File jsonFile = new File(DIR_HOME_VERSION, id + "/" + id + ".json");
+            if (jsonFile.exists()) {
+                try {
+                    String content = Tools.read(jsonFile.getAbsolutePath());
+                    JsonObject root = JsonParser.parseString(content).getAsJsonObject();
+                    boolean changed = false;
+                    if (root.has("libraries")) {
+                        JsonArray libs = root.getAsJsonArray("libraries");
+                        JsonArray kept = new JsonArray();
+                        for (JsonElement el : libs) {
+                            String name = null;
+                            if (el.isJsonObject() && el.getAsJsonObject().has("name")) {
+                                name = el.getAsJsonObject().get("name").getAsString();
+                            }
+                            if (name != null && name.startsWith("org.lwjgl:")) {
+                                changed = true;
+                                continue;
+                            }
+                            kept.add(el);
+                        }
+                        if (changed) {
+                            File backup = new File(jsonFile.getAbsolutePath() + ".no-lwjgl.bak");
+                            if (!backup.exists()) {
+                                Files.copy(jsonFile.toPath(), backup.toPath(), StandardCopyOption.COPY_ATTRIBUTES);
+                            }
+                            root.add("libraries", kept);
+                            Tools.write(jsonFile.getAbsolutePath(), root.toString());
+                            System.out.println("[LWJGLFix] Removed org.lwjgl libraries from " + jsonFile);
+                        }
+                    }
+                } catch (Exception e) {
+                    System.err.println("[LWJGLFix] Failed to patch " + jsonFile + ": " + e);
+                }
+            }
+            id = null;
+            try {
+                JsonObject root = JsonParser.parseString(Tools.read(jsonFile.getAbsolutePath())).getAsJsonObject();
+                if (root.has("inheritsFrom")) id = root.get("inheritsFrom").getAsString();
+            } catch (Exception ignored) {
+            }
+        }
+        // Drop any stale Mojang lwjgl jars Fabric may have downloaded on a
+        // previous run, so they can never be picked up again.
+        File lwjglLibDir = new File(DIR_HOME_LIBRARY, "org/lwjgl");
+        if (lwjglLibDir.exists()) {
+            try {
+                deleteRecursively(lwjglLibDir);
+                System.out.println("[LWJGLFix] Removed stale Mojang lwjgl jars from " + lwjglLibDir);
+            } catch (Exception e) {
+                System.err.println("[LWJGLFix] Could not remove " + lwjglLibDir + ": " + e);
+            }
+        }
+    }
+
+    private static void deleteRecursively(File dir) throws IOException {
+        if (dir.isDirectory()) {
+            File[] children = dir.listFiles();
+            if (children != null) {
+                for (File child : children) {
+                    deleteRecursively(child);
+                }
+            }
+        }
+        if (!dir.delete() && dir.exists()) {
+            throw new IOException("Could not delete " + dir);
+        }
     }
 
     private static final String[][] LOG4J_ARTIFACTS = {

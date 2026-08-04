@@ -1,11 +1,17 @@
 #import "MainMenuViewController.h"
 #import "ThemeManager.h"
+#import "MarkdownRenderer.h"
+
+static NSString *const NewsURLString = @"https://raw.githubusercontent.com/Ynnyny/Angel-Aura-Amethyst-iOS/refs/heads/main/news.md";
+static const NSTimeInterval NewsRefreshInterval = 300.0; // 5 minutes
 
 @interface MainMenuViewController () <WKNavigationDelegate>
 @property (nonatomic) WKWebView *webView;
 @property (nonatomic) UILabel *titleLabel;
 @property (nonatomic) UILabel *versionLabel;
 @property (nonatomic) UIActivityIndicatorView *loadingIndicator;
+@property (nonatomic) NSTimer *newsRefreshTimer;
+@property (nonatomic) NSString *cachedMarkdown;
 @end
 
 @implementation MainMenuViewController
@@ -15,6 +21,27 @@
     [self setup];
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(updateColors) name:ThemeDidChangeNotification object:nil];
     [self updateColors];
+    [self loadNews];
+    [self startNewsRefreshTimer];
+}
+
+- (void)viewWillAppear:(BOOL)animated {
+    [super viewWillAppear:animated];
+    [self loadNews];
+}
+
+- (void)dealloc {
+    [[NSNotificationCenter defaultCenter] removeObserver:self];
+    [_newsRefreshTimer invalidate];
+}
+
+- (void)startNewsRefreshTimer {
+    [_newsRefreshTimer invalidate];
+    _newsRefreshTimer = [NSTimer scheduledTimerWithTimeInterval:NewsRefreshInterval
+                                                         target:self
+                                                       selector:@selector(loadNews)
+                                                       userInfo:nil
+                                                        repeats:YES];
 }
 
 - (void)setup {
@@ -38,6 +65,7 @@
     _webView.layer.cornerRadius = 8;
     _webView.layer.masksToBounds = YES;
     _webView.backgroundColor = [UIColor clearColor];
+    _webView.opaque = NO;
     _webView.scrollView.indicatorStyle = UIScrollViewIndicatorStyleWhite;
     [self.view addSubview:_webView];
 
@@ -61,10 +89,74 @@
         [_loadingIndicator.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
         [_loadingIndicator.centerYAnchor constraintEqualToAnchor:self.view.centerYAnchor],
     ]];
+}
 
-    // MOCK DATA - thay bằng URL thật ở bước sau
-    NSString *html = @"<html><head><style>body{font-family:-apple-system;padding:16px;color:#fff;background:transparent}h2{color:#5E5CE6}.news{background:rgba(255,255,255,0.05);border-radius:8px;padding:12px;margin:8px 0}</style></head><body><h2>Latest News</h2><div class='news'><strong>Welcome to Angel Aura!</strong><br>Your Minecraft launcher for iOS.</div><div class='news'><strong>Getting Started</strong><br>Select a version and press Launch to start playing.</div><div class='news'><strong>Mod Support</strong><br>Browse and install mods from Modrinth.</div></body></html>";
-    [_webView loadHTMLString:html baseURL:nil];
+#pragma mark - News
+
+- (void)loadNews {
+    NSURL *url = [NSURL URLWithString:NewsURLString];
+    [[NSURLSession.sharedSession dataTaskWithURL:url completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (error || !data) {
+                if (self.cachedMarkdown) {
+                    [self renderNews];
+                } else {
+                    [self showLoadError];
+                }
+                return;
+            }
+            NSString *markdown = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
+            if (markdown.length == 0) {
+                if (self.cachedMarkdown) {
+                    [self renderNews];
+                } else {
+                    [self showLoadError];
+                }
+                return;
+            }
+            self.cachedMarkdown = markdown;
+            [self renderNews];
+        });
+    }] resume];
+}
+
+- (void)renderNews {
+    if (self.cachedMarkdown.length == 0) return;
+
+    ThemeManager *theme = ThemeManager.shared;
+    UIColor *textColor = theme.primaryTextColor;
+    UIColor *secondaryColor = theme.secondaryTextColor;
+    UIColor *accentColor = theme.accentColor;
+    UIColor *codeBgColor = theme.isDarkMode
+        ? [UIColor colorWithRed:0.12 green:0.12 blue:0.15 alpha:1.0]
+        : [UIColor colorWithRed:0.93 green:0.93 blue:0.95 alpha:1.0];
+
+    NSString *html = [MarkdownRenderer htmlFromMarkdown:self.cachedMarkdown
+                                              textColor:textColor
+                                        secondaryColor:secondaryColor
+                                           accentColor:accentColor
+                                           codeBgColor:codeBgColor
+                                                isDark:theme.isDarkMode];
+    [self.webView loadHTMLString:html baseURL:nil];
+}
+
+- (void)showLoadError {
+    ThemeManager *theme = ThemeManager.shared;
+    NSString *html = [NSString stringWithFormat:
+        @"<html><head><meta name='viewport' content='width=device-width, initial-scale=1.0'>"
+        "<style>body{font-family:-apple-system,sans-serif;padding:24px;background:transparent;color:%@}"
+        "h2{color:%@;font-size:17px;margin:0 0 8px 0}p{color:%@;font-size:14px;line-height:1.5}</style></head>"
+        "<body><h2>Latest News</h2><p>Unable to load news. Check your internet connection.</p></body></html>",
+        [self hexStringFromColor:theme.primaryTextColor],
+        [self hexStringFromColor:theme.accentColor],
+        [self hexStringFromColor:theme.secondaryTextColor]];
+    [self.webView loadHTMLString:html baseURL:nil];
+}
+
+- (NSString *)hexStringFromColor:(UIColor *)color {
+    CGFloat r, g, b, a;
+    if (![color getRed:&r green:&g blue:&b alpha:&a]) return @"#FFFFFF";
+    return [NSString stringWithFormat:@"#%02X%02X%02X", (int)(r * 255), (int)(g * 255), (int)(b * 255)];
 }
 
 - (void)updateColors {
@@ -72,6 +164,8 @@
     self.view.backgroundColor = theme.contentBackgroundColor;
     _titleLabel.textColor = theme.primaryTextColor;
     _versionLabel.textColor = theme.secondaryTextColor;
+    _webView.scrollView.indicatorStyle = theme.isDarkMode ? UIScrollViewIndicatorStyleWhite : UIScrollViewIndicatorStyleBlack;
+    [self renderNews];
 }
 
 - (void)webView:(WKWebView *)webView didStartProvisionalNavigation:(WKNavigation *)navigation {
@@ -84,10 +178,6 @@
 
 - (void)webView:(WKWebView *)webView didFailNavigation:(WKNavigation *)navigation withError:(NSError *)error {
     [_loadingIndicator stopAnimating];
-}
-
-- (void)dealloc {
-    [[NSNotificationCenter defaultCenter] removeObserver:self];
 }
 
 @end

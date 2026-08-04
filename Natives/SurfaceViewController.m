@@ -34,10 +34,10 @@ int memorystatus_control(uint32_t command, int32_t pid, uint32_t flags, void *bu
 static int currentHotbarSlot = -1;
 static GameSurfaceView* pojavWindow;
 
-@interface SurfaceViewController ()<UITextFieldDelegate, UIGestureRecognizerDelegate, UIPointerInteractionDelegate> {
+@interface SurfaceViewController ()<UITextFieldDelegate, UIGestureRecognizerDelegate> {
     // TouchController integration
     NSUInteger nextTouchControllerIndex;
-    NSMutableDictionary<UITouch*, NSNumber*>* touchControllerIndexMap;
+    NSMutableDictionary<NSValue*, NSNumber*>* touchControllerIndexMap;
 }
 
 @property(nonatomic) NSDictionary* metadata;
@@ -65,14 +65,9 @@ static GameSurfaceView* pojavWindow;
 @property(nonatomic) UIImpactFeedbackGenerator *mediumHaptic;
 
 @property(nonatomic) NSString *jarPath;
+@property(nonatomic) NSArray<NSString *> *jarArgs;
+@property(nonatomic) int jarMinJavaVersion;
 
-@end
-
-// deltaX/deltaY were removed from the public UIEvent.h in the iOS 26 SDK
-// but still exist at runtime (iOS 13.4+); they carry pointer-lock deltas.
-@interface UIEvent (AmethystPointerLockDelta)
-@property (nonatomic, readonly) CGFloat deltaX;
-@property (nonatomic, readonly) CGFloat deltaY;
 @end
 
 @implementation SurfaceViewController
@@ -85,9 +80,15 @@ static GameSurfaceView* pojavWindow;
 }
 
 - (instancetype)initWithJarPath:(NSString *)jarPath {
+    return [self initWithJarPath:jarPath args:nil minJavaVersion:8];
+}
+
+- (instancetype)initWithJarPath:(NSString *)jarPath args:(NSArray<NSString *> *)args minJavaVersion:(int)minJavaVersion {
     self = [super init];
     self.metadata = nil;
     self.jarPath = jarPath;
+    self.jarArgs = args;
+    self.jarMinJavaVersion = minJavaVersion > 0 ? minJavaVersion : 8;
     return self;
 }
 
@@ -217,9 +218,6 @@ static GameSurfaceView* pojavWindow;
     self.mousePointerView.userInteractionEnabled = NO;
     [self.touchView addSubview:self.mousePointerView];
 
-    UIPointerInteraction *pointerInteraction = [[UIPointerInteraction alloc] initWithDelegate:self];
-    [self.touchView addInteraction:pointerInteraction];
-
     self.inputTextField = [[TrackedTextField alloc] initWithFrame:CGRectMake(0, -32.0, self.view.frame.size.width, 30.0)];
     self.inputTextField.backgroundColor = UIColor.secondarySystemBackgroundColor;
     self.inputTextField.delegate = self;
@@ -244,8 +242,6 @@ static GameSurfaceView* pojavWindow;
         GCMouse* mouse = note.object;
         [self registerMouseCallbacks:mouse];
         virtualMouseEnabled = YES;
-        [self becomeFirstResponder];
-        [self.view becomeFirstResponder];
     self.mousePointerView.hidden = isGrabbing;
         [self setNeedsUpdateOfPrefersPointerLocked];
     }];
@@ -257,8 +253,6 @@ static GameSurfaceView* pojavWindow;
         mouse.mouseInput.middleButton.pressedChangedHandler = nil;
         mouse.mouseInput.rightButton.pressedChangedHandler = nil;
         [mouse.mouseInput.auxiliaryButtons makeObjectsPerformSelector:@selector(setPressedChangedHandler:) withObject:nil];
-        [self becomeFirstResponder];
-        [self.view becomeFirstResponder];
         [self setNeedsUpdateOfPrefersPointerLocked];
         if (getPrefBool(@"control.hardware_hide")) {
             self.ctrlView.hidden = NO;
@@ -314,8 +308,6 @@ static GameSurfaceView* pojavWindow;
 
 - (void)viewDidAppear:(BOOL)animated {
     [super viewDidAppear:animated];
-    [self becomeFirstResponder];
-    [self.view becomeFirstResponder];
     [self setNeedsUpdateOfPrefersPointerLocked];
 }
 
@@ -455,8 +447,6 @@ static GameSurfaceView* pojavWindow;
         }
     }
     // Update pointer lock state
-    [self becomeFirstResponder];
-    [self.view becomeFirstResponder];
     [self setNeedsUpdateOfPrefersPointerLocked];
 }
 
@@ -518,8 +508,6 @@ static GameSurfaceView* pojavWindow;
     }
     self.scrollPanGesture.enabled = !isGrabbing;
     self.mousePointerView.hidden = isGrabbing || !virtualMouseEnabled;
-    [self becomeFirstResponder];
-    [self.view becomeFirstResponder];
     [self setNeedsUpdateOfPrefersPointerLocked];
 
     // Update buttons visibility
@@ -530,11 +518,12 @@ static GameSurfaceView* pojavWindow;
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
         int ret;
         if (self.jarPath) {
-            ret = launchJVM(
+            ret = launchJVMWithArgs(
                 BaseAuthenticator.current.authData[@"username"] ?: @"Player",
                 self.jarPath,
                 windowWidth, windowHeight,
-                8
+                self.jarMinJavaVersion,
+                self.jarArgs
             );
         } else {
             int minVersion = [self.metadata[@"javaVersion"][@"majorVersion"] intValue];
@@ -699,18 +688,18 @@ static GameSurfaceView* pojavWindow;
     if (event == ACTION_DOWN) {
         int index = touchcontroller_onTouchDown(normX, normY);
         if (index >= 0) {
-            [touchControllerIndexMap setObject:@(index) forKey:touchEvent];
+            [touchControllerIndexMap setObject:@(index) forKey:[NSValue valueWithNonretainedObject:touchEvent]];
         }
     } else if (event == ACTION_MOVE || event == ACTION_MOVE_MOTION) {
-        NSNumber* indexObj = [touchControllerIndexMap objectForKey:touchEvent];
+        NSNumber* indexObj = [touchControllerIndexMap objectForKey:[NSValue valueWithNonretainedObject:touchEvent]];
         if (indexObj) {
             touchcontroller_onTouchMove([indexObj intValue], normX, normY);
         }
     } else if (event == ACTION_UP || event == ACTION_CANCEL) {
-        NSNumber* indexObj = [touchControllerIndexMap objectForKey:touchEvent];
+        NSNumber* indexObj = [touchControllerIndexMap objectForKey:[NSValue valueWithNonretainedObject:touchEvent]];
         if (indexObj) {
             touchcontroller_onTouchUp([indexObj intValue]);
-            [touchControllerIndexMap removeObjectForKey:touchEvent];
+            [touchControllerIndexMap removeObjectForKey:[NSValue valueWithNonretainedObject:touchEvent]];
         }
     }
 
@@ -800,17 +789,7 @@ static GameSurfaceView* pojavWindow;
 }
 
 - (BOOL)prefersPointerLocked {
-    return isGrabbing;
-}
-
-#pragma mark - UIPointerInteractionDelegate
-
-- (UIPointerRegion *)pointerInteraction:(UIPointerInteraction *)interaction regionForRequest:(UIPointerRegionRequest *)request defaultRegion:(UIPointerRegion *)defaultRegion {
-    return defaultRegion;
-}
-
-- (UIPointerStyle *)pointerInteraction:(UIPointerInteraction *)interaction styleForRegion:(UIPointerRegion *)region {
-    return isGrabbing ? [UIPointerStyle hiddenPointerStyle] : nil;
+    return GCMouse.mice.count > 0 && (isGrabbing || virtualMouseEnabled);
 }
 
 - (void)registerMouseCallbacks:(GCMouse *)mouse {
@@ -904,6 +883,7 @@ static GameSurfaceView* pojavWindow;
     // NSLog(@"Mouse pos = %f, %f", point.x, point.y);
     switch (sender.state) {
         case UIGestureRecognizerStateBegan:
+            NSLog(@"[Input] Pointer hover began");
             [self sendTouchPoint:point withEvent:ACTION_DOWN];
             break;
         case UIGestureRecognizerStateChanged:
@@ -1038,8 +1018,6 @@ static GameSurfaceView* pojavWindow;
                         virtualMouseEnabled = !virtualMouseEnabled;
                         self.mousePointerView.hidden = !virtualMouseEnabled;
                         setPrefBool(@"control.virtmouse_enable", virtualMouseEnabled);
-                        [self becomeFirstResponder];
-                        [self.view becomeFirstResponder];
                         [self setNeedsUpdateOfPrefersPointerLocked];
                     }
                     break;
@@ -1146,14 +1124,6 @@ int touchesMovedCount;
     int i = 0;
     for (UITouch *touch in touches) {
         if (touch.type == UITouchTypeIndirectPointer) {
-            if (isGrabbing) {
-                if (event.buttonMask & UIEventButtonMaskPrimary) {
-                    CallbackBridge_nativeSendMouseButton(GLFW_MOUSE_BUTTON_LEFT, 1, 0);
-                }
-                if (event.buttonMask & UIEventButtonMaskSecondary) {
-                    CallbackBridge_nativeSendMouseButton(GLFW_MOUSE_BUTTON_RIGHT, 1, 0);
-                }
-            }
             continue; // handle this in a different place
         }
         CGPoint locationInView = [touch locationInView:self.rootView];
@@ -1178,14 +1148,7 @@ int touchesMovedCount;
 
     for (UITouch *touch in touches) {
         if (touch.type == UITouchTypeIndirectPointer) {
-            if (isGrabbing) {
-                // Pointer lock is active: deliver system pointer deltas to the game
-                CGFloat dx = event.deltaX;
-                CGFloat dy = event.deltaY;
-                if (dx != 0.0 || dy != 0.0) {
-                    [self sendTouchPoint:CGPointMake(dx, dy) withEvent:ACTION_MOVE_MOTION];
-                }
-            } else if (!virtualMouseEnabled) {
+            if (!isGrabbing && !virtualMouseEnabled) {
                 CGPoint point = [touch locationInView:self.rootView];
                 [self sendTouchPoint:point withEvent:ACTION_MOVE];
             }
@@ -1205,14 +1168,6 @@ int touchesMovedCount;
 {
     for (UITouch *touch in touches) {
         if (touch.type == UITouchTypeIndirectPointer) {
-            if (isGrabbing) {
-                if (event.buttonMask & UIEventButtonMaskPrimary) {
-                    CallbackBridge_nativeSendMouseButton(GLFW_MOUSE_BUTTON_LEFT, 0, 0);
-                }
-                if (event.buttonMask & UIEventButtonMaskSecondary) {
-                    CallbackBridge_nativeSendMouseButton(GLFW_MOUSE_BUTTON_RIGHT, 0, 0);
-                }
-            }
             continue; // handle this in a different place
         }
         [self sendTouchEvent:touch withUIEvent:event withEvent:ACTION_UP];

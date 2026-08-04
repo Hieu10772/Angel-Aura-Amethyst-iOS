@@ -7,11 +7,47 @@
 #import "LauncherPreferences.h"
 #import "HapticManager.h"
 #import "ios_uikit_bridge.h"
+#import "JavaGUIViewController.h"
 #import "UIImageView+AFNetworking.h"
 #import "UnzipKit.h"
 #import "ModpackUtils.h"
 #import "PLProfiles.h"
+#import "MrpackInstaller.h"
 #import "utils.h"
+
+static NSString *readInstallerVersionId(NSString *jarPath) {
+    NSError *uzError;
+    UZKArchive *archive = [[UZKArchive alloc] initWithPath:jarPath error:&uzError];
+    if (uzError) return nil;
+    NSData *profileData = [archive extractDataFromFile:@"install_profile.json" error:&uzError];
+    if (uzError || !profileData) return nil;
+    NSDictionary *profileJson = [NSJSONSerialization JSONObjectWithData:profileData options:0 error:nil];
+    if (![profileJson isKindOfClass:[NSDictionary class]]) return nil;
+
+    NSData *verData = nil;
+    NSDictionary *versionInfo = profileJson[@"versionInfo"];
+    if ([versionInfo isKindOfClass:[NSDictionary class]]) {
+        verData = [NSJSONSerialization dataWithJSONObject:versionInfo options:0 error:nil];
+    } else if ([profileJson[@"json"] isKindOfClass:[NSString class]]) {
+        NSString *jsonStr = profileJson[@"json"];
+        if ([jsonStr hasPrefix:@"/"]) {
+            verData = [archive extractDataFromFile:[jsonStr substringFromIndex:1] error:&uzError];
+        } else {
+            verData = [jsonStr dataUsingEncoding:NSUTF8StringEncoding];
+        }
+    } else if ([profileJson[@"json"] isKindOfClass:[NSDictionary class]]) {
+        verData = [NSJSONSerialization dataWithJSONObject:profileJson[@"json"] options:0 error:nil];
+    } else if ([profileJson[@"install"] isKindOfClass:[NSDictionary class]] &&
+               [profileJson[@"install"][@"versionInfo"] isKindOfClass:[NSDictionary class]]) {
+        verData = [NSJSONSerialization dataWithJSONObject:profileJson[@"install"][@"versionInfo"] options:0 error:nil];
+    }
+    NSDictionary *parsed = verData ? [NSJSONSerialization JSONObjectWithData:verData options:0 error:nil] : nil;
+    if ([parsed isKindOfClass:[NSDictionary class]]) {
+        id vId = parsed[@"id"];
+        if ([vId isKindOfClass:[NSString class]] && [vId length] > 0) return vId;
+    }
+    return nil;
+}
 
 @interface ModDetailViewController () <UITableViewDelegate, UITableViewDataSource>
 @property (nonatomic) NSDictionary *mod;
@@ -657,169 +693,7 @@ static NSString *const kVerCell = @"VerCell";
             return;
         }
 
-        [overlay updateProgress:0.3 message:@"Parsing modpack..."];
-        NSError *uzError;
-        UZKArchive *archive = [[UZKArchive alloc] initWithPath:dlPath error:&uzError];
-        if (uzError) {
-            [[NSFileManager defaultManager] removeItemAtPath:dlPath error:nil];
-            [overlay finishWithMessage:@"Invalid modpack"];
-            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 1.0 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{ [overlay dismiss]; });
-            return;
-        }
-
-        NSData *indexData = [archive extractDataFromFile:@"modrinth.index.json" error:&uzError];
-        if (uzError || !indexData) {
-            [[NSFileManager defaultManager] removeItemAtPath:dlPath error:nil];
-            [overlay finishWithMessage:@"Missing index"];
-            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 1.0 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{ [overlay dismiss]; });
-            return;
-        }
-
-        NSDictionary *indexDict = [NSJSONSerialization JSONObjectWithData:indexData options:0 error:&uzError];
-        if (uzError) {
-            [[NSFileManager defaultManager] removeItemAtPath:dlPath error:nil];
-            [overlay finishWithMessage:@"Corrupt index"];
-            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 1.0 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{ [overlay dismiss]; });
-            return;
-        }
-
-        NSString *versionName = indexDict[@"name"] ?: [filename stringByDeletingPathExtension];
-        NSString *displayTitle = _mod[@"title"] ?: versionName;
-        NSString *cleanName = [[displayTitle lowercaseString] stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceCharacterSet];
-        cleanName = [cleanName stringByReplacingOccurrencesOfString:@" " withString:@"_"];
-        versionName = cleanName;
-
-        NSString *versionDir = [VersionDirectoryManager.shared versionPathForVersion:versionName];
-        [[NSFileManager defaultManager] createDirectoryAtPath:versionDir withIntermediateDirectories:YES attributes:nil error:nil];
-        [VersionDirectoryManager.shared ensureVersionDirectoriesForVersion:versionName];
-
-        [overlay updateProgress:0.4 message:[NSString stringWithFormat:@"Downloading %lu mods...", (unsigned long)[indexDict[@"files"] count]]];
-        __block NSUInteger completedFiles = 0;
-        NSUInteger totalFiles = [indexDict[@"files"] count];
-        __block BOOL installFailed = NO;
-        dispatch_group_t modGroup = dispatch_group_create();
-
-        for (NSDictionary *indexFile in indexDict[@"files"]) {
-            dispatch_group_enter(modGroup);
-            NSString *modUrl = [indexFile[@"downloads"] firstObject];
-            NSString *modPath = indexFile[@"path"] ?: @"";
-            NSString *targetPath = [versionDir stringByAppendingPathComponent:modPath];
-            if (modUrl.length > 0) {
-                [DownloadManager.shared downloadToPath:modUrl targetPath:targetPath completion:^(BOOL success, NSError *e) {
-                    if (!success) installFailed = YES;
-                    completedFiles++;
-                    dispatch_async(dispatch_get_main_queue(), ^{
-                        [overlay updateProgress:0.4 + (0.3 * completedFiles / totalFiles) message:[NSString stringWithFormat:@"Downloading mods... (%lu/%lu)", (unsigned long)completedFiles, (unsigned long)totalFiles]];
-                    });
-                    dispatch_group_leave(modGroup);
-                }];
-            } else {
-                completedFiles++;
-                dispatch_group_leave(modGroup);
-            }
-        }
-
-        dispatch_group_notify(modGroup, dispatch_get_main_queue(), ^{
-            if (installFailed) {
-                [[NSFileManager defaultManager] removeItemAtPath:dlPath error:nil];
-                [overlay finishWithMessage:@"Some mods failed"];
-                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 1.0 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{ [overlay dismiss]; });
-                return;
-            }
-
-            [overlay updateProgress:0.7 message:@"Extracting overrides..."];
-            [ModpackUtils archive:archive extractDirectory:@"overrides" toPath:versionDir error:nil];
-            [ModpackUtils archive:archive extractDirectory:@"client-overrides" toPath:versionDir error:nil];
-            [[NSFileManager defaultManager] removeItemAtPath:dlPath error:nil];
-
-            [overlay updateProgress:0.8 message:@"Setting up version..."];
-            NSDictionary *deps = indexDict[@"dependencies"];
-            NSString *packMcVersion = deps[@"minecraft"] ?: mcVersion;
-
-            void (^finalizeInstall)(void) = ^{
-                NSString *versionJsonPath = [versionDir stringByAppendingPathComponent:[NSString stringWithFormat:@"%@.json", versionName]];
-                NSMutableDictionary *modpackJson = [NSMutableDictionary dictionary];
-                modpackJson[@"id"] = versionName;
-                modpackJson[@"type"] = @"release";
-                modpackJson[@"libraries"] = @[];
-                modpackJson[@"minecraftVersion"] = packMcVersion;
-                if (deps[@"fabric-loader"] || deps[@"quilt-loader"]) {
-                    NSString *loaderType = deps[@"fabric-loader"] ? @"fabric" : @"quilt";
-                    NSString *loaderVer = deps[@"fabric-loader"] ?: deps[@"quilt-loader"];
-                    NSString *profileId = [NSString stringWithFormat:@"%@-loader-%@-%@", loaderType, loaderVer, packMcVersion];
-                    modpackJson[@"inheritsFrom"] = profileId;
-                } else if (deps[@"forge"]) {
-                    modpackJson[@"inheritsFrom"] = packMcVersion;
-                } else if (deps[@"neoforge"]) {
-                    modpackJson[@"inheritsFrom"] = packMcVersion;
-                }
-                if (packMcVersion) {
-                    modpackJson[@"minecraftVersion"] = packMcVersion;
-                }
-                NSData *jsonData = [NSJSONSerialization dataWithJSONObject:modpackJson options:NSJSONWritingPrettyPrinted error:nil];
-                if (jsonData) [jsonData writeToFile:versionJsonPath atomically:YES];
-
-                [self downloadClientJarForModpack:versionName];
-
-                NSString *profileName = _mod[@"title"] ?: versionName;
-                NSMutableDictionary *existing = PLProfiles.current.profiles[profileName];
-                if (existing) {
-                    existing = [existing mutableCopy];
-                    existing[@"lastVersionId"] = versionName;
-                    existing[@"gameDir"] = [NSString stringWithFormat:@"./versions/%@", versionName];
-                    PLProfiles.current.profiles[profileName] = existing;
-                } else {
-                    PLProfiles.current.profiles[profileName] = @{
-                        @"name": profileName,
-                        @"lastVersionId": versionName,
-                        @"gameDir": [NSString stringWithFormat:@"./versions/%@", versionName]
-                    }.mutableCopy;
-                }
-                PLProfiles.current.selectedProfileName = profileName;
-                [PLProfiles.current save];
-                VersionDirectoryManager.shared.currentVersion = versionName;
-
-                [overlay finishWithMessage:@"Installed!"];
-                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 1.5 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
-                    [overlay dismiss];
-                    showDialog(@"Modpack Installed", [NSString stringWithFormat:@"%@ installed as profile.", profileName]);
-                });
-            };
-
-            NSString *loaderType = nil, *loaderVer = nil;
-            if (deps[@"fabric-loader"]) {
-                loaderType = @"fabric"; loaderVer = deps[@"fabric-loader"];
-            } else if (deps[@"quilt-loader"]) {
-                loaderType = @"quilt"; loaderVer = deps[@"quilt-loader"];
-            }
-
-            if (loaderType && loaderVer) {
-                NSString *profileId = [NSString stringWithFormat:@"%@-loader-%@-%@", loaderType, loaderVer, packMcVersion];
-                NSString *loaderDir = [VersionDirectoryManager.shared versionPathForVersion:profileId];
-                NSString *loaderJsonPath = [loaderDir stringByAppendingPathComponent:[NSString stringWithFormat:@"%@.json", profileId]];
-
-                if (![[NSFileManager defaultManager] fileExistsAtPath:loaderJsonPath]) {
-                    NSString *profileUrl;
-                    if ([loaderType isEqualToString:@"fabric"]) {
-                        profileUrl = [NSString stringWithFormat:@"https://meta.fabricmc.net/v2/versions/loader/%@/%@/profile/json", packMcVersion, loaderVer];
-                    } else {
-                        profileUrl = [NSString stringWithFormat:@"https://meta.quiltmc.org/v3/versions/loader/%@/%@/profile/json", packMcVersion, loaderVer];
-                    }
-                    [overlay updateProgress:0.82 message:@"Downloading loader profile..."];
-                    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-                        NSData *profileData = [NSData dataWithContentsOfURL:[NSURL URLWithString:profileUrl]];
-                        if (profileData) {
-                            [[NSFileManager defaultManager] createDirectoryAtPath:loaderDir withIntermediateDirectories:YES attributes:nil error:nil];
-                            [profileData writeToFile:loaderJsonPath atomically:YES];
-                        }
-                        dispatch_async(dispatch_get_main_queue(), finalizeInstall);
-                    });
-                    return;
-                }
-            }
-
-            finalizeInstall();
-        });
+        [MrpackInstaller installMrpackAtPath:dlPath title:_mod[@"title"] hostVC:self removeOnCompletion:YES];
     }];
 }
 
