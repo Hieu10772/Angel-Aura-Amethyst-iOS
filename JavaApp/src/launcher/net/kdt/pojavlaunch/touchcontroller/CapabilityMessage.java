@@ -18,13 +18,13 @@ public final class CapabilityMessage extends ProxyMessage {
     public void encode(ByteBuffer buffer) {
         buffer.putInt(getType().id);
         byte[] capBytes = capabilityId.getBytes();
-        buffer.putInt(capBytes.length);
+        buffer.put((byte) capBytes.length);
         buffer.put(capBytes);
         buffer.put(enabled ? (byte) 1 : (byte) 0);
     }
 
     public static CapabilityMessage decode(ByteBuffer buffer) {
-        int len = buffer.getInt();
+        int len = buffer.get() & 0xFF;
         byte[] capBytes = new byte[len];
         buffer.get(capBytes);
         String capId = new String(capBytes);

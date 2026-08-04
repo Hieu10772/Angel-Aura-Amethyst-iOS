@@ -266,7 +266,7 @@ static NSArray *kLoaders;
                                 @"version": ver,
                                 @"mc_version": mcVersion,
                                 @"stable": @YES,
-                                @"download_url": [NSString stringWithFormat:@"https://bmclapi2.bangbang93.com/forge/download/%@/%@", mcVersion, ver]
+                                @"download_url": [NSString stringWithFormat:@"https://maven.minecraftforge.net/net/minecraftforge/forge/%@-%@/forge-%@-%@-installer.jar", mcVersion, ver, mcVersion, ver]
                             }];
                         } else if ([entryObj isKindOfClass:[NSString class]]) {
                             NSString *ver = (NSString *)entryObj;
@@ -275,7 +275,7 @@ static NSArray *kLoaders;
                                 @"version": ver,
                                 @"mc_version": mcVersion,
                                 @"stable": @YES,
-                                @"download_url": [NSString stringWithFormat:@"https://bmclapi2.bangbang93.com/forge/download/%@/%@", mcVersion, ver]
+                                @"download_url": [NSString stringWithFormat:@"https://maven.minecraftforge.net/net/minecraftforge/forge/%@-%@/forge-%@-%@-installer.jar", mcVersion, ver, mcVersion, ver]
                             }];
                         }
                     }
@@ -342,6 +342,16 @@ static NSArray *kLoaders;
             NSData *versionData = data;
             NSString *finalName = name;
 
+            // Forge/NeoForge entries download an installer JAR, not a version profile
+            // JSON; anything else (vanilla/fabric/quilt) is a plain profile JSON.
+            BOOL looksLikeInstaller = [name hasPrefix:@"neoforge-"] || [name containsString:@"-forge-"];
+
+            // For Forge/NeoForge installers we keep the installer jar around and run it
+            // headless (--installClient) in the embedded JVM after writing the profile,
+            // so the patched client jar + libraries actually get produced.
+            NSString *installerPath = nil;
+            NSString *installerVersionId = nil;
+
             // Check if this is a Forge/NeoForge installer JAR (ZIP with PK header)
             const uint8_t *bytes = (const uint8_t *)data.bytes;
             if (data.length > 2 && bytes[0] == 0x50 && bytes[1] == 0x4B) {
@@ -363,8 +373,18 @@ static NSArray *kLoaders;
                                 NSError *writeError;
                                 versionData = [NSJSONSerialization dataWithJSONObject:versionInfo options:0 error:&writeError];
                             } else if ([profileJson[@"json"] isKindOfClass:[NSString class]]) {
-                                // Modern Forge/NeoForge (1.13+): json string field
-                                versionData = [profileJson[@"json"] dataUsingEncoding:NSUTF8StringEncoding];
+                                NSString *jsonStr = profileJson[@"json"];
+                                if ([jsonStr hasPrefix:@"/"]) {
+                                    // Modern Forge/NeoForge (1.17+): json field is the path
+                                    // to version.json INSIDE the installer jar
+                                    NSData *innerJson = [archive extractDataFromFile:[jsonStr substringFromIndex:1] error:&uzError];
+                                    if (!uzError && innerJson) {
+                                        versionData = innerJson;
+                                    }
+                                } else {
+                                    // Older Forge (1.13-1.16): json field contains the version json string
+                                    versionData = [jsonStr dataUsingEncoding:NSUTF8StringEncoding];
+                                }
                             } else if ([profileJson[@"json"] isKindOfClass:[NSDictionary class]]) {
                                 versionData = [NSJSONSerialization dataWithJSONObject:profileJson[@"json"] options:0 error:nil];
                             } else if ([profileJson[@"install"] isKindOfClass:[NSDictionary class]] &&
@@ -381,89 +401,68 @@ static NSArray *kLoaders;
                         }
                     }
                 }
+
+                // The real version id comes from the version JSON the installer will
+                // write (e.g. "1.20.1-forge-47.3.0"); use it so our profile lands in
+                // the same versions/<id> directory the installer uses.
+                NSDictionary *parsedInfo = [NSJSONSerialization JSONObjectWithData:versionData options:0 error:nil];
+                if ([parsedInfo isKindOfClass:[NSDictionary class]]) {
+                    id vId = parsedInfo[@"id"];
+                    if ([vId isKindOfClass:[NSString class]] && [vId length] > 0) {
+                        installerVersionId = vId;
+                    }
+                }
+
+                if (installerVersionId.length > 0) {
+                    // Keep the installer for the headless install run below
+                    NSString *installersDir = [NSString stringWithFormat:@"%s/installers", getenv("POJAV_HOME") ?: ""];
+                    if (installersDir.length > [@"/installers" length]) {
+                        [[NSFileManager defaultManager] createDirectoryAtPath:installersDir withIntermediateDirectories:YES attributes:nil error:nil];
+                        installerPath = [installersDir stringByAppendingPathComponent:[NSString stringWithFormat:@"%@-installer.jar", name]];
+                        [[NSFileManager defaultManager] removeItemAtPath:installerPath error:nil];
+                        [data writeToFile:installerPath atomically:YES];
+                    }
+                }
                 [[NSFileManager defaultManager] removeItemAtPath:tmpPath error:nil];
+                if (installerVersionId.length == 0) {
+                    self.statusLabel.text = [NSString stringWithFormat:@"Download failed: invalid installer jar (%@)", name];
+                    [self.tableView reloadData];
+                    return;
+                }
+            } else if (looksLikeInstaller) {
+                // The server did not return a real installer jar (e.g. 404/400 page).
+                // Never fabricate a profile from garbage in this case.
+                self.statusLabel.text = [NSString stringWithFormat:@"Download failed: server did not return an installer jar for %@", name];
+                [self.tableView reloadData];
+                return;
             }
 
             VersionDirectoryManager *mgr = VersionDirectoryManager.shared;
+            if (installerPath) {
+                // Forge/NeoForge: DO NOT pre-create a version profile. Run the installer
+                // through the dedicated jar-runner environment (JavaGUIViewController);
+                // the installer itself writes versions/<id>/<id>.json, the patched client
+                // jar and libraries. requiredJavaVersion picks the right runtime from the
+                // installer's own bytecode, so no manual min-version needed here.
+                NSString *installDir = [NSString stringWithFormat:@"%s/instances/%@",
+                    getenv("POJAV_HOME") ?: "", mgr.currentInstance ?: @"default"];
+                self.statusLabel.text = [NSString stringWithFormat:@"Installing %@ ...", installerVersionId ?: name];
+                JavaGUIViewController *vc = [[JavaGUIViewController alloc] init];
+                vc.filepath = installerPath;
+                vc.jvmArgs = @[@"--installClient", installDir];
+                vc.modalPresentationStyle = UIModalPresentationFullScreen;
+                [self presentViewController:vc animated:YES completion:nil];
+                [self.tableView reloadData];
+                return;
+            }
+
             NSString *versionDir = [mgr versionPathForVersion:finalName];
             int counter = 1;
             while ([[NSFileManager defaultManager] fileExistsAtPath:versionDir]) {
-                finalName = [NSString stringWithFormat:@"%@-%d", name, counter++];
+                finalName = [NSString stringWithFormat:@"%@-%d", finalName, counter++];
                 versionDir = [mgr versionPathForVersion:finalName];
             }
             [[NSFileManager defaultManager] createDirectoryAtPath:versionDir withIntermediateDirectories:YES attributes:nil error:nil];
-
-            // For NeoForge, ensure the universal jar library is in the version JSON
-            if ([name hasPrefix:@"neoforge-"]) {
-                NSString *afterPrefix = [name substringFromIndex:@"neoforge-".length];
-                NSRange hyphen = [afterPrefix rangeOfString:@"-"];
-                NSString *neoVersion = hyphen.location != NSNotFound ? [afterPrefix substringFromIndex:hyphen.location + 1] : afterPrefix;
-                NSMutableDictionary *versionInfo = [NSJSONSerialization JSONObjectWithData:versionData options:NSJSONReadingMutableContainers error:nil];
-                if ([versionInfo isKindOfClass:[NSDictionary class]]) {
-                    NSMutableArray *libs = versionInfo[@"libraries"];
-                    if (![libs isKindOfClass:[NSMutableArray class]]) {
-                        libs = [NSMutableArray array];
-                        versionInfo[@"libraries"] = libs;
-                    }
-                    NSString *neoJarName = [NSString stringWithFormat:@"net.neoforged:neoforge:%@:universal", neoVersion];
-                    BOOL alreadyExists = NO;
-                    for (NSDictionary *lib in libs) {
-                        if ([lib[@"name"] hasPrefix:@"net.neoforged:neoforge:"]) {
-                            alreadyExists = YES;
-                            break;
-                        }
-                    }
-                    if (!alreadyExists) {
-                        [libs addObject:@{
-                            @"name": neoJarName,
-                            @"url": @"https://maven.neoforged.net/releases/",
-                            @"downloads": @{
-                                @"artifact": @{
-                                    @"path": [NSString stringWithFormat:@"net/neoforged/neoforge/%@/neoforge-%@-universal.jar", neoVersion, neoVersion],
-                                    @"url": [NSString stringWithFormat:@"https://maven.neoforged.net/releases/net/neoforged/neoforge/%@/neoforge-%@-universal.jar", neoVersion, neoVersion]
-                                }
-                            }
-                        }];
-                    }
-                    versionData = [NSJSONSerialization dataWithJSONObject:versionInfo options:0 error:nil];
-                }
-            }
-
-            // For standard Forge, ensure the main client jar is in the version JSON
-            if ([name hasPrefix:@"forge-"]) {
-                NSString *afterPrefix = [name substringFromIndex:@"forge-".length];
-                // afterPrefix = "<mcVer>-<forgeVer>" e.g. "1.20.1-47.1.0"
-                NSMutableDictionary *versionInfo = [NSJSONSerialization JSONObjectWithData:versionData options:NSJSONReadingMutableContainers error:nil];
-                if ([versionInfo isKindOfClass:[NSDictionary class]]) {
-                    NSMutableArray *libs = versionInfo[@"libraries"];
-                    if (![libs isKindOfClass:[NSMutableArray class]]) {
-                        libs = [NSMutableArray array];
-                        versionInfo[@"libraries"] = libs;
-                    }
-                    BOOL alreadyExists = NO;
-                    for (NSDictionary *lib in libs) {
-                        if ([lib[@"name"] hasPrefix:@"net.minecraftforge:forge:"]) {
-                            alreadyExists = YES;
-                            break;
-                        }
-                    }
-                    if (!alreadyExists) {
-                        NSString *forgeLibName = [NSString stringWithFormat:@"net.minecraftforge:forge:%@", afterPrefix];
-                        NSString *jarPath = [NSString stringWithFormat:@"net/minecraftforge/forge/%@/forge-%@.jar", afterPrefix, afterPrefix];
-                        [libs addObject:@{
-                            @"name": forgeLibName,
-                            @"url": @"https://maven.minecraftforge.net/",
-                            @"downloads": @{
-                                @"artifact": @{
-                                    @"path": jarPath,
-                                    @"url": [NSString stringWithFormat:@"https://maven.minecraftforge.net/%@", jarPath]
-                                }
-                            }
-                        }];
-                    }
-                    versionData = [NSJSONSerialization dataWithJSONObject:versionInfo options:0 error:nil];
-                }
-            }
 
             NSString *jsonPath = [versionDir stringByAppendingPathComponent:[NSString stringWithFormat:@"%@.json", finalName]];
 
@@ -587,6 +586,31 @@ static NSArray *kLoaders;
             vc.modalPresentationStyle = UIModalPresentationFullScreen;
             [self presentViewController:vc animated:YES completion:nil];
         }]];
+
+        // If this looks like a Forge/NeoForge installer, offer a headless install that
+        // writes versions/<id> itself and then drops back to the home screen.
+        NSData *head = [NSData dataWithContentsOfFile:destPath options:NSDataReadingMappedIfSafe error:nil];
+        BOOL isInstaller = NO;
+        if (head.length > 2) {
+            const uint8_t *bytes = (const uint8_t *)head.bytes;
+            if (bytes[0] == 0x50 && bytes[1] == 0x4B) {
+                NSError *uzError;
+                UZKArchive *archive = [[UZKArchive alloc] initWithPath:destPath error:&uzError];
+                isInstaller = (!uzError && [archive extractDataFromFile:@"install_profile.json" error:&uzError] != nil);
+            }
+        }
+        if (isInstaller) {
+            [confirm addAction:[UIAlertAction actionWithTitle:@"Install (headless)" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
+                NSString *installDir = [NSString stringWithFormat:@"%s/instances/%@",
+                    getenv("POJAV_HOME") ?: "", VersionDirectoryManager.shared.currentInstance ?: @"default"];
+                JavaGUIViewController *vc = [[JavaGUIViewController alloc] init];
+                vc.filepath = destPath;
+                vc.jvmArgs = @[@"--installClient", installDir];
+                vc.modalPresentationStyle = UIModalPresentationFullScreen;
+                [self presentViewController:vc animated:YES completion:nil];
+            }]];
+        }
+
         [confirm addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
         [self presentViewController:confirm animated:YES completion:nil];
     } else {

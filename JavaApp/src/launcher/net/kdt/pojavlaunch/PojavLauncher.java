@@ -14,6 +14,7 @@ import org.lwjgl.glfw.CallbackBridge;
 import org.lwjgl.glfw.GLFW;
 
 import net.kdt.pojavlaunch.uikit.*;
+import net.kdt.pojavlaunch.touchcontroller.TouchControllerManager;
 import net.kdt.pojavlaunch.utils.*;
 import net.kdt.pojavlaunch.value.*;
 
@@ -74,7 +75,14 @@ public class PojavLauncher {
 
         String runJar = System.getProperty("pojav.runJar");
         if (runJar != null) {
-            UIKit.callback_JavaGUIViewController_launchJarFile(runJar, new String[0]);
+            // Forge/NeoForge installers: run headless with --installClient into the
+            // game directory (POJAV_GAME_DIR), which the ObjC side passes as
+            // -Dpojav.installDir=... when launching the installer jar.
+            String installDir = System.getProperty("pojav.installDir");
+            String[] jarArgs = (installDir != null && !installDir.isEmpty())
+                ? new String[]{"--installClient", installDir}
+                : new String[0];
+            UIKit.callback_JavaGUIViewController_launchJarFile(runJar, jarArgs);
         } else {
             try {
                 launchMinecraft(args);
@@ -224,6 +232,29 @@ public class PojavLauncher {
         String sizeStr = System.getProperty("cacio.managed.screensize");
         System.setProperty("glfw.windowSize", sizeStr);
         String[] size = sizeStr.split("x");
+        // The TouchController launcher-side JNI (IosSocketTransport etc.)
+        // lives in libTouchControllerBridge.dylib, which the launcher loads
+        // here so nativeInit() resolves in the launcher classloader.
+        // IMPORTANT: do NOT System.load the main executable (AngelAuraAmethyst)
+        // from the launcher: the game's Knot classloader must be the one that
+        // loads it (via LWJGL's Library.<clinit>), otherwise Knot's load fails
+        // with "already loaded in another classloader" and the game crashes
+        // with UnsatisfiedLinkError on the first GLFW native call.
+        try {
+            System.load(System.getenv("BUNDLE_PATH") + "/Frameworks/libTouchControllerBridge.dylib");
+            System.out.println("[TouchController] loaded libTouchControllerBridge.dylib");
+        } catch (Throwable t) {
+            System.err.println("[TouchController] TouchControllerBridge load failed: " + t);
+        }
+        // Initialize the TouchController proxy (dormant until here).
+        // Must run in the launcher's classloader, before the game main class,
+        // so the shared ring-buffer transport and JNI refs are ready.
+        try {
+            TouchControllerManager.getInstance().initialize(
+                Integer.parseInt(size[0]), Integer.parseInt(size[1]));
+        } catch (Throwable t) {
+            System.err.println("[TouchController] initialize failed (optional): " + t);
+        }
         MCOptionUtils.load();
         MCOptionUtils.set("fullscreen", "false");
         MCOptionUtils.set("overrideWidth", size[0]);

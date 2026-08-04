@@ -316,7 +316,7 @@ void AWTInputBridge_sendKey(int keycode) {
     
 dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
         int version = self.requiredJavaVersion;
-        launchJVM(BaseAuthenticator.current.authData[@"username"] ?: @"Player", self.filepath, windowWidth, windowHeight, version);
+        launchJVMWithArgs(BaseAuthenticator.current.authData[@"username"] ?: @"Player", self.filepath, windowWidth, windowHeight, version, self.jvmArgs);
         dispatch_async(dispatch_get_main_queue(), ^{
             UIKit_returnToSplitView();
         });

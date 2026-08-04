@@ -179,6 +179,32 @@ target_link_libraries(audio_capture
   "-framework AVFoundation"
 )
 
+# TouchController bridge: launcher-side JNI (IosSocketTransport/vibration/
+# keyboard) lives in its OWN dylib so the launcher can System.load() it
+# without registering the main executable with the launcher classloader.
+# The game's Knot classloader must be the one that System.load()s
+# AngelAuraAmethyst (via LWJGL's Library.<clinit>) so the game-side JNI
+# stubs (top.fifthlight.touchcontroller...) resolve; loading the executable
+# from the launcher first makes Knot's second System.load() fail with
+# "already loaded in another classloader" and the game then crashes with
+# UnsatisfiedLinkError on the first GLFW native call.
+add_library(TouchControllerBridge SHARED
+  touchcontroller_launcher.c
+  touchcontroller_jni_bridge.c
+  touchcontroller_vibration.m
+  touchcontroller_keyboard.m
+)
+target_link_libraries(TouchControllerBridge
+  "${GLOBAL_LDFLAGS}"
+  "-framework UIKit"
+  "-framework Foundation"
+  "-framework QuartzCore"
+)
+set_target_properties(TouchControllerBridge PROPERTIES
+  MACOSX_RPATH TRUE
+  INSTALL_NAME_DIR "@rpath"
+)
+
 # Angel Aura Amethyst
 add_executable(AngelAuraAmethyst
   dyld_bypass_validation.m
@@ -253,14 +279,11 @@ egl_bridge.m
     ios_uikit_bridge.m
     utils.m
 
-    touchcontroller_launcher.c
-    touchcontroller_vibration.m
-    touchcontroller_keyboard.m
-    TouchControllerManager.m
-    touchcontroller_jni_bridge.c
+    touchcontroller_game_bridge.c
 
    # UI
    ../UI/Common/ThemeManager.m
+   ../UI/Common/MarkdownRenderer.m
    ../UI/Common/HapticManager.m
    ../UI/Common/CustomButton.m
    ../UI/Common/CustomSlider.m
@@ -281,6 +304,7 @@ egl_bridge.m
    ../UI/Screens/Game/GameListViewController.m
    ../UI/Screens/Mod/ModListViewController.m
    ../UI/Screens/Mod/ModDetailViewController.m
+   ../UI/Screens/Mod/MrpackInstaller.m
    ../UI/Screens/Mod/ModrinthService.m
    ../UI/Screens/Mod/CurseForgeService.m
    ../UI/Screens/Modpack/ModpackListViewController.m
@@ -302,6 +326,7 @@ endif()
 
 target_link_libraries(AngelAuraAmethyst
   PUBLIC AFNetworking
+  TouchControllerBridge
   lzma
   "-F'${CMAKE_CURRENT_LIST_DIR}/build'"
   "-F'${CMAKE_CURRENT_LIST_DIR}/resources/Frameworks'"

@@ -230,6 +230,10 @@ void init_loadCustomJvmFlags(int* argc, const char** argv) {
 }
 
 int launchJVM(NSString *username, id launchTarget, int width, int height, int minVersion) {
+    return launchJVMWithArgs(username, launchTarget, width, height, minVersion, nil);
+}
+
+int launchJVMWithArgs(NSString *username, id launchTarget, int width, int height, int minVersion, NSArray<NSString *> *jarArgs) {
     NSLog(@"[JavaLauncher] Beginning JVM launch");
 
     init_loadDefaultEnv();
@@ -610,6 +614,12 @@ int launchJVM(NSString *username, id launchTarget, int width, int height, int mi
     if (launchJar) {
         classpath = [classpath stringByAppendingFormat:@":%@", launchTarget];
         margv[++margc] = [NSString stringWithFormat:@"-Dpojav.runJar=%@", launchTarget].UTF8String;
+        // Forge/NeoForge installers: pass the install directory so the Java side
+        // can invoke main with --installClient <gameDir> (see PojavLauncher.java).
+        if ([jarArgs isKindOfClass:NSArray.class] && jarArgs.count >= 2 &&
+            [jarArgs[0] isEqualToString:@"--installClient"]) {
+            margv[++margc] = [NSString stringWithFormat:@"-Dpojav.installDir=%@", jarArgs[1]].UTF8String;
+        }
     }
     margv[++margc] = "-cp";
     margv[++margc] = classpath.UTF8String;

@@ -26,6 +26,7 @@
 #include "utils.h"
 
 #include "JavaLauncher.h"
+#include "touchcontroller_jni_bridge.h"
 
 jint (*orig_ProcessImpl_forkAndExec)(JNIEnv *env, jobject process, jint mode, jbyteArray helperpath, jbyteArray prog, jbyteArray argBlock, jint argc, jbyteArray envBlock, jint envc, jbyteArray dir, jintArray std_fds, jboolean redirectErrorStream);
 jlong (*orig_ProcessHandleImpl_isAlive0)(JNIEnv *env, jclass clazz, jlong jpid);
@@ -250,6 +251,10 @@ jint JNI_OnLoad(JavaVM* vm, void* reserved) {
         runtimeJNIEnvPtr = env;
         JNI_OnLoadGLFW();
     }
+    // Best-effort early init; refs are re-resolved lazily on first touch event
+    // (see touchcontroller_jni_bridge.c), so this may safely fail if the
+    // launcher classes are not loaded yet.
+    touchcontroller_jni_init(vm);
 
     return JNI_VERSION_1_4;
 }

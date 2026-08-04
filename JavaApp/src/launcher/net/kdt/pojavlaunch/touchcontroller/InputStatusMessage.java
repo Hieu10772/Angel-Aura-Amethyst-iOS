@@ -2,6 +2,9 @@ package net.kdt.pojavlaunch.touchcontroller;
 
 import java.nio.ByteBuffer;
 
+/**
+ * Text input status message (type 7, usually wrapped in LargeMessage chunks).
+ */
 public final class InputStatusMessage extends ProxyMessage {
     public final TextInputState status;
 

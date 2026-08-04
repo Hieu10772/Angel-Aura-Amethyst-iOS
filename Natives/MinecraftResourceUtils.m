@@ -163,8 +163,24 @@ NSMutableArray<NSDictionary *> *localVersionList, *remoteVersionList;
         [json[@"libraries"] addObject:client];
     }
 
-    // Parse Forge 1.17+ additional JVM Arguments
-    if (json[@"inheritsFrom"] == nil || json[@"arguments"][@"jvm"] == nil) {
+    // Parse Forge/NeoForge additional JVM Arguments.
+    // resolveFullInheritsChain merges the chain into the vanilla parent, so the
+    // "inheritsFrom" key is gone by the time we get here; detect loader-style
+    // module-path args by content instead (bootstraplauncher / ${...} markers).
+    if (![json[@"arguments"] isKindOfClass:NSDictionary.class] ||
+        ![json[@"arguments"][@"jvm"] isKindOfClass:NSArray.class]) {
+        return;
+    }
+    BOOL hasLoaderJvmArgs = NO;
+    for (NSString *arg in json[@"arguments"][@"jvm"]) {
+        if ([arg containsString:@"bootstraplauncher"] ||
+            [arg containsString:@"${library_directory}"] ||
+            [arg containsString:@"${version_name}"]) {
+            hasLoaderJvmArgs = YES;
+            break;
+        }
+    }
+    if (!hasLoaderJvmArgs) {
         return;
     }
     json[@"arguments"][@"jvm_processed"] = [[NSMutableArray alloc] init];

@@ -128,6 +128,10 @@ void UIKit_launchMinecraftSurfaceVC(UIWindow* window, NSDictionary* metadata) {
 }
 
 void UIKit_launchJarFile(UIWindow* window, NSString* jarPath) {
+    UIKit_launchJarFileWithArgs(window, jarPath, nil, 8);
+}
+
+void UIKit_launchJarFileWithArgs(UIWindow* window, NSString* jarPath, NSArray<NSString *> *args, int minJavaVersion) {
     setPrefObject(@"internal.selected_account", BaseAuthenticator.current.authData[@"username"]);
 
     // Set up game directory so the jar runs in the profile's Minecraft environment
@@ -156,7 +160,7 @@ void UIKit_launchJarFile(UIWindow* window, NSString* jarPath) {
         } completion:^(BOOL b){
             [window resignKeyWindow];
             window.alpha = 1;
-            window.rootViewController = [[SurfaceViewController alloc] initWithJarPath:jarPath];
+            window.rootViewController = [[SurfaceViewController alloc] initWithJarPath:jarPath args:args minJavaVersion:minJavaVersion];
             [window makeKeyAndVisible];
         }];
     });
@@ -183,6 +187,9 @@ void UIKit_returnToSplitView() {
             [window makeKeyAndVisible];
         }];
     });
+    // A headless installer run (Forge/NeoForge) writes versions/<id> while the
+    // JVM was running, so rescan the versions directory when we come back.
+    [[NSNotificationCenter defaultCenter] postNotificationName:@"VersionDidChangeNotification" object:nil userInfo:@{}];
 }
 
 void launchInitialViewController(UIWindow *window) {

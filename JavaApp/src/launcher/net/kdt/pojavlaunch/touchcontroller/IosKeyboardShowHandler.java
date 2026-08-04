@@ -8,9 +8,8 @@ public class IosKeyboardShowHandler implements LauncherProxyClient.KeyboardShowH
     private static final String TAG = "IosKeyboardShowHandler";
     private static volatile IosKeyboardShowHandler instance;
 
-    static {
-        System.loadLibrary("touchcontroller_launcher");
-    }
+    // JNI natives live in the main executable (System.load'ed at startup,
+    // see UIKit.java); no separate library to load here.
 
     private IosKeyboardShowHandler() {}
 

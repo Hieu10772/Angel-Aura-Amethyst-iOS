@@ -3,27 +3,28 @@ package net.kdt.pojavlaunch.touchcontroller;
 import java.nio.ByteBuffer;
 
 /**
- * iOS transport for TouchController using JNI to native ring buffer.
- * This connects to the same ring buffer that the mod's IosPlatform uses.
+ * iOS transport for TouchController using JNI to the shared in-process ring
+ * buffer queue. The queue is shared with the game-side Transport
+ * (top.fifthlight.touchcontroller.common.platform.ios.Transport) so the mod
+ * and the launcher exchange raw messages with no length prefix.
  */
 public class IosSocketTransport implements MessageTransport {
     private static final String TAG = "IosSocketTransport";
-    
+
     private long nativeHandle = 0;
     private boolean closed = false;
     private final byte[] readBuffer = new byte[256];
 
-    static {
-        System.loadLibrary("touchcontroller_launcher");
-    }
+    // The JNI natives live inside the main executable (AngelAuraAmethyst),
+    // which is System.load()'d into the JVM at startup (see UIKit.java), so
+    // no separate library is loaded here.
 
     /**
-     * Creates a new iOS transport connected to the mod's ring buffer.
-     * @param socketName The socket name (must match TOUCH_CONTROLLER_PROXY_SOCKET env var)
+     * Creates a new iOS transport connected to the shared ring buffer queue.
      */
-    public static IosSocketTransport create(String socketName) {
+    public static IosSocketTransport create() {
         IosSocketTransport transport = new IosSocketTransport();
-        transport.nativeHandle = nativeInit(socketName);
+        transport.nativeHandle = nativeInit();
         if (transport.nativeHandle == 0) {
             throw new RuntimeException("Failed to initialize iOS transport");
         }
@@ -33,23 +34,19 @@ public class IosSocketTransport implements MessageTransport {
     @Override
     public void send(ByteBuffer buffer) {
         if (closed) return;
-        
+
         int remaining = buffer.remaining();
-        if (remaining > 255) {
-            throw new IllegalArgumentException("Message too big: " + remaining);
-        }
         if (remaining == 0) {
             throw new IllegalArgumentException("Empty message");
         }
 
-        byte[] sendBuffer = new byte[remaining + 1];
-        sendBuffer[0] = (byte) remaining;
-        
+        byte[] sendBuffer = new byte[remaining];
+
         if (buffer.hasArray() && !buffer.isReadOnly()) {
             byte[] array = buffer.array();
-            System.arraycopy(array, buffer.position() + buffer.arrayOffset(), sendBuffer, 1, remaining);
+            System.arraycopy(array, buffer.position() + buffer.arrayOffset(), sendBuffer, 0, remaining);
         } else {
-            buffer.get(sendBuffer, 1, remaining);
+            buffer.get(sendBuffer);
         }
 
         nativeSend(nativeHandle, sendBuffer, 0, sendBuffer.length);
@@ -63,7 +60,7 @@ public class IosSocketTransport implements MessageTransport {
         if (length <= 0) return false;
 
         if (buffer.remaining() < length) {
-            throw new IllegalArgumentException("Buffer overflow: packet length is " + length + 
+            throw new IllegalArgumentException("Buffer overflow: packet length is " + length +
                 ", but the buffer only has " + buffer.remaining());
         }
 
@@ -83,7 +80,7 @@ public class IosSocketTransport implements MessageTransport {
     }
 
     // Native methods
-    private static native long nativeInit(String socketName);
+    private static native long nativeInit();
     private static native int nativeReceive(long handle, byte[] buffer);
     private static native void nativeSend(long handle, byte[] buffer, int offset, int length);
     private static native void nativeClose(long handle);

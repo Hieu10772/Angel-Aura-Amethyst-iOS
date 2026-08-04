@@ -1,5 +1,6 @@
 package net.kdt.pojavlaunch.touchcontroller;
 
+import java.io.ByteArrayOutputStream;
 import java.nio.ByteBuffer;
 import java.util.*;
 import java.util.concurrent.*;
@@ -7,7 +8,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Main client for communicating with TouchController mod.
- * Handles the protocol: Initialize -> Capabilities -> Touch events
+ * Handles the protocol: Capabilities -> Touch events (current TouchController wire protocol).
  */
 public class LauncherProxyClient {
     private final MessageTransport transport;
@@ -66,7 +67,7 @@ public class LauncherProxyClient {
             messageClient.run();
             messageThread = new Thread(this::messageLoop, "TouchController-Proxy");
             messageThread.start();
-            
+
             // Send initial capabilities after connection
             sendCapabilities();
         }
@@ -74,13 +75,30 @@ public class LauncherProxyClient {
 
     private void messageLoop() {
         ByteBuffer buffer = ByteBuffer.allocate(1024);
+        ByteArrayOutputStream largeBuffer = new ByteArrayOutputStream();
         while (running.get()) {
             try {
                 if (messageClient.receive(buffer)) {
                     buffer.flip();
                     ProxyMessage msg = ProxyMessage.decode(buffer.getInt(), buffer);
                     if (msg != null) {
-                        handleMessage(msg);
+                        if (msg.getType() == ProxyMessageType.LARGE_MESSAGE) {
+                            LargeMessage large = (LargeMessage) msg;
+                            largeBuffer.write(large.payload);
+                            if (large.end) {
+                                byte[] assembled = largeBuffer.toByteArray();
+                                largeBuffer.reset();
+                                ByteBuffer inner = ByteBuffer.wrap(assembled);
+                                if (inner.remaining() >= 4) {
+                                    ProxyMessage innerMsg = ProxyMessage.decode(inner.getInt(), inner);
+                                    if (innerMsg != null) {
+                                        handleMessage(innerMsg);
+                                    }
+                                }
+                            }
+                        } else {
+                            handleMessage(msg);
+                        }
                     }
                     buffer.clear();
                 } else {
@@ -98,36 +116,35 @@ public class LauncherProxyClient {
     }
 
     private void handleMessage(ProxyMessage msg) {
-        int typeId = msg.getType().id;
-        switch (typeId) {
-            case 10: // VIBRATE
+        switch (msg.getType()) {
+            case INITIALIZE:
+                sendCapabilities();
+                break;
+            case VIBRATE:
                 VibrateMessage vm = (VibrateMessage) msg;
                 if (vibrationHandler != null) {
                     vibrationHandler.vibrate(vm.kind);
                 }
                 break;
-            case 0: // INITIALIZE
-                sendCapabilities();
-                break;
-            case 6: // INPUT_STATUS
+            case INPUT_STATUS:
                 InputStatusMessage ism = (InputStatusMessage) msg;
                 if (inputHandler != null) {
                     inputHandler.updateState(ism.status);
                 }
                 break;
-            case 7: // INPUT_CURSOR
+            case INPUT_CURSOR:
                 InputCursorMessage icm = (InputCursorMessage) msg;
                 if (inputHandler != null) {
                     inputHandler.updateCursor(icm.cursorRect);
                 }
                 break;
-            case 8: // INPUT_AREA
+            case INPUT_AREA:
                 InputAreaMessage iam = (InputAreaMessage) msg;
                 if (inputHandler != null) {
                     inputHandler.updateArea(iam.inputAreaRect);
                 }
                 break;
-            case 9: // KEYBOARD_SHOW
+            case KEYBOARD_SHOW:
                 KeyboardShowMessage ksm = (KeyboardShowMessage) msg;
                 if (keyboardShowHandler != null) {
                     if (ksm.show) keyboardShowHandler.showKeyboard();
@@ -147,7 +164,7 @@ public class LauncherProxyClient {
 
     /**
      * Add or update a touch pointer.
-     * @param index Pointer index (must be monotonically increasing from 0)
+     * @param index Pointer index (must be monotonically increasing from 1)
      * @param x Normalized X coordinate [0, 1] relative to game view
      * @param y Normalized Y coordinate [0, 1] relative to game view
      */
