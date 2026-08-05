@@ -15,6 +15,7 @@
 #import "JavaLauncher.h"
 #import "LauncherPreferences.h"
 #import "MinecraftResourceUtils.h"
+#import "MousePointerFactory.h"
 #import "PLProfiles.h"
 #import "SurfaceViewController.h"
 #import "TrackedTextField.h"
@@ -33,6 +34,7 @@ int memorystatus_control(uint32_t command, int32_t pid, uint32_t flags, void *bu
 
 static int currentHotbarSlot = -1;
 static GameSurfaceView* pojavWindow;
+static CGPoint virtualMouseHotspot = {0, 0};
 
 @interface SurfaceViewController ()<UITextFieldDelegate, UIGestureRecognizerDelegate> {
     // TouchController integration
@@ -210,11 +212,15 @@ static GameSurfaceView* pojavWindow;
 
     // Virtual mouse
     virtualMouseEnabled = getPrefBool(@"control.virtmouse_enable");
+    id pointerStyleObj = getPrefObject(@"control.mouse_pointer_style");
+    NSString *pointerStyle = [pointerStyleObj isKindOfClass:[NSString class]] ? pointerStyleObj : @"default";
     virtualMouseFrame = CGRectMake(self.view.frame.size.width / 2, self.view.frame.size.height / 2, 18, 27);
     self.mousePointerView = [[UIImageView alloc] initWithFrame:virtualMouseFrame];
     self.mousePointerView.autoresizingMask = UIViewAutoresizingFlexibleLeftMargin | UIViewAutoresizingFlexibleTopMargin | UIViewAutoresizingFlexibleRightMargin |UIViewAutoresizingFlexibleBottomMargin;
     self.mousePointerView.hidden = !virtualMouseEnabled;
-    self.mousePointerView.image = [UIImage imageNamed:@"MousePointer"];
+    self.mousePointerView.contentMode = UIViewContentModeScaleAspectFit;
+    self.mousePointerView.image = [MousePointerFactory imageForStyle:pointerStyle];
+    virtualMouseHotspot = [MousePointerFactory hotspotForStyle:pointerStyle];
     self.mousePointerView.userInteractionEnabled = NO;
     [self.touchView addSubview:self.mousePointerView];
 
@@ -418,7 +424,13 @@ static GameSurfaceView* pojavWindow;
 
     // Update virtual mouse scale
     CGFloat mouseScale = getPrefFloat(@"control.mouse_scale") / 100.0;
-    virtualMouseFrame = CGRectMake(self.view.frame.size.width / 2, self.view.frame.size.height / 2, 18.0 * mouseScale, 27 * mouseScale);
+    id pointerStyleObj = getPrefObject(@"control.mouse_pointer_style");
+    NSString *pointerStyle = [pointerStyleObj isKindOfClass:[NSString class]] ? pointerStyleObj : @"default";
+    self.mousePointerView.image = [MousePointerFactory imageForStyle:pointerStyle];
+    virtualMouseHotspot = [MousePointerFactory hotspotForStyle:pointerStyle];
+    virtualMouseFrame = CGRectMake(self.view.frame.size.width / 2 - 18.0 * mouseScale * virtualMouseHotspot.x,
+                                   self.view.frame.size.height / 2 - 27.0 * mouseScale * virtualMouseHotspot.y,
+                                   18.0 * mouseScale, 27.0 * mouseScale);
     self.mousePointerView.frame = virtualMouseFrame;
 
     self.shouldHideControlsFromRecording = getPrefFloat(@"control.recording_hide");
@@ -502,8 +514,8 @@ static GameSurfaceView* pojavWindow;
     if (isGrabbing == JNI_TRUE) {
         CGFloat screenScale = self.surfaceView.layer.contentsScale;
         CallbackBridge_nativeSendCursorPos(ACTION_DOWN, lastVirtualMousePoint.x * screenScale, lastVirtualMousePoint.y * screenScale);
-        virtualMouseFrame.origin.x = self.view.frame.size.width / 2;
-        virtualMouseFrame.origin.y = self.view.frame.size.height / 2;
+        virtualMouseFrame.origin.x = self.view.frame.size.width / 2 - virtualMouseFrame.size.width * virtualMouseHotspot.x;
+        virtualMouseFrame.origin.y = self.view.frame.size.height / 2 - virtualMouseFrame.size.height * virtualMouseHotspot.y;
         self.mousePointerView.frame = virtualMouseFrame;
     }
     self.scrollPanGesture.enabled = !isGrabbing;
@@ -635,11 +647,13 @@ static GameSurfaceView* pojavWindow;
                 virtualMouseFrame.origin.x += location.x * self.mouseSpeed;
                 virtualMouseFrame.origin.y += location.y * self.mouseSpeed;
             }
-            virtualMouseFrame.origin.x = clamp(virtualMouseFrame.origin.x, 0, self.surfaceView.frame.size.width);
-            virtualMouseFrame.origin.y = clamp(virtualMouseFrame.origin.y, 0, self.surfaceView.frame.size.height);
+            CGFloat cursorX = clamp(virtualMouseFrame.origin.x, 0, self.surfaceView.frame.size.width);
+            CGFloat cursorY = clamp(virtualMouseFrame.origin.y, 0, self.surfaceView.frame.size.height);
+            virtualMouseFrame.origin.x = cursorX - virtualMouseFrame.size.width * virtualMouseHotspot.x;
+            virtualMouseFrame.origin.y = cursorY - virtualMouseFrame.size.height * virtualMouseHotspot.y;
             lastVirtualMousePoint = location;
             self.mousePointerView.frame = virtualMouseFrame;
-            CallbackBridge_nativeSendCursorPos(event, virtualMouseFrame.origin.x * screenScale, virtualMouseFrame.origin.y * screenScale);
+            CallbackBridge_nativeSendCursorPos(event, cursorX * screenScale, cursorY * screenScale);
             return;
         }
         lastVirtualMousePoint = location;

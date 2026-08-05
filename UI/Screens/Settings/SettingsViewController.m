@@ -9,7 +9,7 @@
 #import <PhotosUI/PhotosUI.h>
 #import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 
-@interface SettingsViewController () <UITableViewDelegate, UITableViewDataSource, UIColorPickerViewControllerDelegate, UINavigationControllerDelegate, UIImagePickerControllerDelegate, PHPickerViewControllerDelegate>
+@interface SettingsViewController () <UITableViewDelegate, UITableViewDataSource, UIColorPickerViewControllerDelegate, UINavigationControllerDelegate, UIImagePickerControllerDelegate, PHPickerViewControllerDelegate, UIDocumentPickerDelegate>
 @property (nonatomic) UITableView *tableView;
 @property (nonatomic) NSArray *sections;
 @property (nonatomic, copy) void (^pendingColorPickCallback)(UIColor *);
@@ -49,6 +49,8 @@
             @{@"type": @"slider", @"label": localize(@"preference.title.mouse_scale", nil), @"key": @"control.mouse_scale", @"min": @30, @"max": @200, @"suffix": @"%"},
             @{@"type": @"slider", @"label": localize(@"preference.title.mouse_speed", nil), @"key": @"control.mouse_speed", @"min": @10, @"max": @300, @"suffix": @"%"},
             @{@"type": @"switch", @"label": localize(@"preference.title.virtmouse_enable", nil), @"key": @"control.virtmouse_enable"},
+            @{@"type": @"picker", @"label": localize(@"preference.title.mouse_pointer_style", nil), @"key": @"control.mouse_pointer_style", @"options": @[@"default", @"arrow", @"crosshair", @"circle", @"dot", @"beam", @"custom"], @"default": @"default"},
+            @{@"type": @"file", @"label": localize(@"preference.title.mouse_pointer_file", nil), @"key": @"control.mouse_pointer_file"},
             @{@"type": @"switch", @"label": localize(@"preference.title.gyroscope_enable", nil), @"key": @"control.gyroscope_enable"},
             @{@"type": @"switch", @"label": localize(@"preference.title.gyroscope_invert_x_axis", nil), @"key": @"control.gyroscope_invert_x_axis"},
             @{@"type": @"slider", @"label": localize(@"preference.title.gyroscope_sensitivity", nil), @"key": @"control.gyroscope_sensitivity", @"min": @10, @"max": @300, @"suffix": @"%"},
@@ -360,6 +362,14 @@
                 [tf.centerYAnchor constraintEqualToAnchor:cell.contentView.centerYAnchor],
                 [tf.widthAnchor constraintEqualToConstant:200],
             ]];
+        } else if ([type isEqualToString:@"file"]) {
+            cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleValue1 reuseIdentifier:cellId];
+            cell.textLabel.font = [UIFont systemFontOfSize:15];
+            cell.detailTextLabel.font = [UIFont systemFontOfSize:14];
+            cell.backgroundColor = ThemeManager.shared.cardBackgroundColor;
+            cell.textLabel.textColor = ThemeManager.shared.primaryTextColor;
+            cell.detailTextLabel.textColor = ThemeManager.shared.secondaryTextColor;
+            cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
         } else if ([type isEqualToString:@"navigate"]) {
             cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleDefault reuseIdentifier:cellId];
             cell.textLabel.font = [UIFont systemFontOfSize:15];
@@ -392,7 +402,7 @@
 
     cell.textLabel.text = nil;
     cell.detailTextLabel.text = nil;
-    if ([type isEqualToString:@"switch"] || [type isEqualToString:@"picker"] || [type isEqualToString:@"navigate"] || [type isEqualToString:@"color"] || [type isEqualToString:@"image"]) {
+    if ([type isEqualToString:@"switch"] || [type isEqualToString:@"picker"] || [type isEqualToString:@"navigate"] || [type isEqualToString:@"color"] || [type isEqualToString:@"image"] || [type isEqualToString:@"file"]) {
         cell.textLabel.text = item[@"label"];
     }
 
@@ -403,6 +413,10 @@
         } else {
             cell.detailTextLabel.text = [value description];
         }
+    } else if ([type isEqualToString:@"file"]) {
+        id pathObj = getPrefObject(item[@"key"]);
+        cell.detailTextLabel.text = ([pathObj isKindOfClass:[NSString class]] && [pathObj length] > 0)
+            ? [pathObj lastPathComponent] : localize(@"Not set", nil);
     } else if ([type isEqualToString:@"switch"]) {
         UISwitch *sw = (UISwitch *)cell.accessoryView;
         sw.on = getPrefBool(item[@"key"]);
@@ -491,7 +505,66 @@
         }
     } else if ([type isEqualToString:@"image"]) {
         [self showImagePicker];
+    } else if ([type isEqualToString:@"file"]) {
+        [self showPointerFilePicker];
     }
+}
+
+#pragma mark - Pointer file picker
+
+- (void)showPointerFilePicker {
+    NSMutableArray *types = [NSMutableArray arrayWithObject:UTTypeImage];
+    UTType *curType = [UTType typeWithFilenameExtension:@"cur"];
+    UTType *aniType = [UTType typeWithFilenameExtension:@"ani"];
+    if (curType) [types addObject:curType];
+    if (aniType) [types addObject:aniType];
+
+    UIDocumentPickerViewController *picker = [[UIDocumentPickerViewController alloc] initForOpeningContentTypes:types asCopy:YES];
+    picker.delegate = self;
+    picker.allowsMultipleSelection = NO;
+    [self presentViewController:picker animated:YES completion:nil];
+}
+
+- (void)documentPicker:(UIDocumentPickerViewController *)controller didPickDocumentsAtURLs:(NSArray<NSURL *> *)urls {
+    NSURL *url = urls.firstObject;
+    if (!url) return;
+
+    NSString *docs = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES).firstObject;
+    NSString *ext = url.pathExtension.lowercaseString;
+    NSFileManager *fm = [NSFileManager defaultManager];
+
+    NSArray *existing = [fm contentsOfDirectoryAtPath:docs error:nil];
+    for (NSString *name in existing) {
+        if ([name hasPrefix:@"custom_pointer"]) {
+            [fm removeItemAtPath:[docs stringByAppendingPathComponent:name] error:nil];
+        }
+    }
+
+    NSString *destPath = [docs stringByAppendingPathComponent:
+        [NSString stringWithFormat:@"custom_pointer.%@", ext.length ? ext : @"img"]];
+    BOOL access = [url startAccessingSecurityScopedResource];
+    NSError *error = nil;
+    BOOL ok = [fm copyItemAtURL:url toURL:[NSURL fileURLWithPath:destPath] error:&error];
+    if (!ok) {
+        NSData *data = [NSData dataWithContentsOfURL:url options:0 error:&error];
+        if (data) {
+            ok = [data writeToFile:destPath atomically:YES];
+        }
+    }
+    if (access) [url stopAccessingSecurityScopedResource];
+
+    if (!ok) {
+        showDialog(localize(@"Error", nil), localize(@"Could not copy the file. Please try another file.", nil));
+        return;
+    }
+
+    setPrefObject(@"control.mouse_pointer_file", destPath);
+    setPrefObject(@"control.mouse_pointer_style", @"custom");
+    [HapticManager.shared play:HapticTypeLight];
+    [_tableView reloadData];
+}
+
+- (void)documentPickerWasCancelled:(UIDocumentPickerViewController *)controller {
 }
 
 #pragma mark - Actions

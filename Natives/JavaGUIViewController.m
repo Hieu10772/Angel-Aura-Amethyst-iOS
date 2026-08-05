@@ -3,6 +3,7 @@
 #import "JavaGUIViewController.h"
 #import "JavaLauncher.h"
 #import "LauncherPreferences.h"
+#import "MousePointerFactory.h"
 #import "PLLogOutputView.h"
 #import "TrackedTextField.h"
 #import "UnzipKit.h"
@@ -133,6 +134,7 @@ void AWTInputBridge_sendKey(int keycode) {
 
 @interface ScrollableSurfaceView<UIScrollViewDelegate> : UIScrollView
 @property CGRect clickRange, virtualMouseFrame;
+@property CGPoint mouseHotspot;
 @property(nonatomic) UIImageView* mousePointerView;
 @property BOOL shouldTriggerClick;
 @end
@@ -148,7 +150,11 @@ void AWTInputBridge_sendKey(int keycode) {
     self.virtualMouseFrame = CGRectMake(frame.size.width / 2, frame.size.height / 2, 18, 27);
     self.mousePointerView = [[UIImageView alloc] initWithFrame:self.virtualMouseFrame];
     self.mousePointerView.hidden = !virtualMouseEnabled;
-    self.mousePointerView.image = [UIImage imageNamed:@"MousePointer"];
+    self.mousePointerView.contentMode = UIViewContentModeScaleAspectFit;
+    id pointerStyleObj = getPrefObject(@"control.mouse_pointer_style");
+    NSString *pointerStyle = [pointerStyleObj isKindOfClass:[NSString class]] ? pointerStyleObj : @"default";
+    self.mousePointerView.image = [MousePointerFactory imageForStyle:pointerStyle];
+    self.mouseHotspot = [MousePointerFactory hotspotForStyle:pointerStyle];
     [surfaceView addSubview:self.mousePointerView];
 
     return self;
@@ -174,11 +180,13 @@ void AWTInputBridge_sendKey(int keycode) {
         // Calculate delta
         location.x = (location.x - prevLocation.x) / self.zoomScale;
         location.y = (location.y - prevLocation.y) / self.zoomScale;
-        // Update cursor's origin
-        _virtualMouseFrame.origin.x = clamp(self.virtualMouseFrame.origin.x + location.x, 0, self.frame.size.width * self.zoomScale);
-        _virtualMouseFrame.origin.y = clamp(self.virtualMouseFrame.origin.y + location.y, 0, self.frame.size.height * self.zoomScale);
+        // Update cursor's position
+        CGFloat cursorX = clamp(self.virtualMouseFrame.origin.x + location.x, 0, self.frame.size.width * self.zoomScale);
+        CGFloat cursorY = clamp(self.virtualMouseFrame.origin.y + location.y, 0, self.frame.size.height * self.zoomScale);
+        _virtualMouseFrame.origin.x = cursorX - self.virtualMouseFrame.size.width * self.mouseHotspot.x;
+        _virtualMouseFrame.origin.y = cursorY - self.virtualMouseFrame.size.height * self.mouseHotspot.y;
         self.mousePointerView.frame = self.virtualMouseFrame;
-        location = self.virtualMouseFrame.origin;
+        location = CGPointMake(cursorX, cursorY);
 
         CGPoint minimumContentOffset = CGPointMake(-self.contentInset.left, -self.contentInset.top);
         CGPoint maximumContentOffset = CGPointMake(
@@ -186,8 +194,8 @@ void AWTInputBridge_sendKey(int keycode) {
             MAX(minimumContentOffset.y, self.contentSize.height + self.contentInset.bottom - self.frame.size.height));
         // Focus scroll view's content area on virtual mouse
         self.contentOffset = CGPointMake(
-            clamp(self.virtualMouseFrame.origin.x * self.zoomScale - self.center.x, minimumContentOffset.x, maximumContentOffset.x),
-            clamp(self.virtualMouseFrame.origin.y * self.zoomScale - self.center.y, minimumContentOffset.y, maximumContentOffset.y));
+            clamp(location.x * self.zoomScale - self.center.x, minimumContentOffset.x, maximumContentOffset.x),
+            clamp(location.y * self.zoomScale - self.center.y, minimumContentOffset.y, maximumContentOffset.y));
     }
 
     // Send cursor position to AWT
@@ -198,12 +206,14 @@ void AWTInputBridge_sendKey(int keycode) {
 - (void)scrollViewDidZoom:(UIScrollView *)scrollView {
     if (virtualMouseEnabled) {
         // Keep virtual mouse in the middle of screen while zooming
-        _virtualMouseFrame.origin.x = (self.contentOffset.x + self.center.x) / self.zoomScale;
-        _virtualMouseFrame.origin.y = (self.contentOffset.y + self.center.y) / self.zoomScale;
+        CGFloat cursorX = (self.contentOffset.x + self.center.x) / self.zoomScale;
+        CGFloat cursorY = (self.contentOffset.y + self.center.y) / self.zoomScale;
+        _virtualMouseFrame.origin.x = cursorX - self.virtualMouseFrame.size.width * self.mouseHotspot.x;
+        _virtualMouseFrame.origin.y = cursorY - self.virtualMouseFrame.size.height * self.mouseHotspot.y;
         self.mousePointerView.frame = self.virtualMouseFrame;
         // Send cursor position to AWT
         CGFloat screenScale = UIScreen.mainScreen.scale * getPrefFloat(@"video.resolution") / 100.0;
-        AWTInputBridge_nativeSendData(EVENT_TYPE_CURSOR_POS, (int)(_virtualMouseFrame.origin.x * screenScale), (int)(_virtualMouseFrame.origin.y * screenScale), 0, 0);
+        AWTInputBridge_nativeSendData(EVENT_TYPE_CURSOR_POS, (int)(cursorX * screenScale), (int)(cursorY * screenScale), 0, 0);
     }
 }
 

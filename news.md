@@ -1,3 +1,19 @@
+# AngelAuraAmethyst iOS — 1.1.3-beta.6
+
+## 🇬🇧 English
+- Fixed "Insufficient contiguous virtual memory space" and early app kills on non-jailbroken devices — the launcher now reads the real remaining memory allowance via `os_proc_available_memory()`, caps auto RAM at 60% of the remaining allowance (minimum 384 MB) and the memory probe no longer blocks launching.
+- Virtual mouse pointer customization — pick from built-in styles (Arrow, Crosshair, Circle, Dot, Beam) or use your own cursor files: Windows `.cur` / `.ani` and common image formats (png, jpg, gif, bmp, tiff, webp…).
+- Cursor hotspot from `.cur`/`.ani` files is honored, so the tap point lands exactly on the arrow tip (or the center of centered shapes).
+- Custom pointer file is stored in the app's Documents folder; resetting or removing the file falls back to the default pointer.
+
+## 🇻🇳 Tiếng Việt
+- Sửa lỗi "Insufficient contiguous virtual memory space" và bị kill sớm trên máy không jailbreak — launcher giờ đọc đúng dung lượng bộ nhớ còn lại qua `os_proc_available_memory()`, giới hạn auto RAM ở 60% phần còn lại (tối thiểu 384 MB) và bước kiểm tra bộ nhớ không còn chặn khởi động.
+- Cá nhân hóa con trỏ chuột ảo — chọn kiểu có sẵn (Arrow, Crosshair, Circle, Dot, Beam) hoặc dùng file con trỏ của bạn: `.cur` / `.ani` của Windows và các định dạng ảnh phổ biến (png, jpg, gif, bmp, tiff, webp…).
+- Tôn trọng hotspot trong file `.cur`/`.ani` — điểm chạm trỏ đúng mũi tên (hoặc tâm với hình tròn).
+- File con trỏ tùy chỉnh lưu trong thư mục Documents của app; xóa/mất file sẽ tự quay về con trỏ mặc định.
+
+---
+
 # AngelAuraAmethyst iOS — 1.1.3-beta.5
 
 ## 🇬🇧 English
