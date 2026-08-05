@@ -253,6 +253,7 @@ add_executable(AngelAuraAmethyst
   CustomControlsViewController.m
   CustomControlsViewController+UndoManager.m
   DownloadProgressViewController.m
+  CursorFileDecoder.m
   FileListViewController.m
   GameSurfaceView.m
   JavaGUIViewController.m
@@ -262,6 +263,7 @@ add_executable(AngelAuraAmethyst
   LauncherPrefManageJREViewController.m
   MinecraftResourceDownloadTask.m
   MinecraftResourceUtils.m
+  MousePointerFactory.m
   PickTextField.m
   PLLogOutputView.m
   PLPickerView.m
