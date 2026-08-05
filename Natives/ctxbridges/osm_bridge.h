@@ -19,6 +19,7 @@ OSMesaContext  (*OSMesaCreateContext) (GLenum format, OSMesaContext sharelist);
 typedef struct {
     OSMesaContext context;
     uint32_t width, height;
+    uint32_t bufferBytes;
     CGColorSpaceRef color_space;
     void* buffer;
 } osm_render_window_t;

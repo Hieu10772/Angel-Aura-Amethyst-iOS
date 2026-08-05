@@ -1,6 +1,7 @@
 #import "VersionBrowserViewController.h"
 #import "ThemeManager.h"
 #import "HapticManager.h"
+#import "InstallerProgressViewController.h"
 #import "JavaGUIViewController.h"
 #import "ios_uikit_bridge.h"
 #import "VersionDirectoryManager.h"
@@ -440,18 +441,28 @@ static NSArray *kLoaders;
             VersionDirectoryManager *mgr = VersionDirectoryManager.shared;
             if (installerPath) {
                 // Forge/NeoForge: DO NOT pre-create a version profile. Run the installer
-                // through the dedicated jar-runner environment (JavaGUIViewController);
-                // the installer itself writes versions/<id>/<id>.json, the patched client
-                // jar and libraries. requiredJavaVersion picks the right runtime from the
+                // through the progress UI (InstallerProgressViewController); the installer
+                // itself writes versions/<id>/<id>.json, the patched client jar and
+                // libraries. requiredJavaVersion picks the right runtime from the
                 // installer's own bytecode, so no manual min-version needed here.
                 NSString *installDir = [NSString stringWithFormat:@"%s/instances/%@",
                     getenv("POJAV_HOME") ?: "", mgr.currentInstance ?: @"default"];
                 self.statusLabel.text = [NSString stringWithFormat:@"Installing %@ ...", installerVersionId ?: name];
-                JavaGUIViewController *vc = [[JavaGUIViewController alloc] init];
-                vc.filepath = installerPath;
-                vc.jvmArgs = @[@"--installClient", installDir];
-                vc.modalPresentationStyle = UIModalPresentationFullScreen;
-                [self presentViewController:vc animated:YES completion:nil];
+                [InstallerProgressViewController presentInstallerFrom:self
+                    jarPath:installerPath
+                    title:[NSString stringWithFormat:@"Installing %@", installerVersionId ?: name]
+                    jvmArgs:@[@"--installClient", installDir]
+                    completion:^(BOOL success, BOOL cancelled, int exitCode) {
+                        if (success) {
+                            self.statusLabel.text = [NSString stringWithFormat:@"✓ %@ installed!", installerVersionId ?: name];
+                        } else if (cancelled) {
+                            self.statusLabel.text = [NSString stringWithFormat:@"Install cancelled: %@", installerVersionId ?: name];
+                        } else {
+                            self.statusLabel.text = [NSString stringWithFormat:@"Install failed: %@", installerVersionId ?: name];
+                        }
+                        [self.tableView reloadData];
+                        UIKit_returnToSplitView();
+                    }];
                 [self.tableView reloadData];
                 return;
             }
@@ -603,11 +614,16 @@ static NSArray *kLoaders;
             [confirm addAction:[UIAlertAction actionWithTitle:@"Install (headless)" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
                 NSString *installDir = [NSString stringWithFormat:@"%s/instances/%@",
                     getenv("POJAV_HOME") ?: "", VersionDirectoryManager.shared.currentInstance ?: @"default"];
-                JavaGUIViewController *vc = [[JavaGUIViewController alloc] init];
-                vc.filepath = destPath;
-                vc.jvmArgs = @[@"--installClient", installDir];
-                vc.modalPresentationStyle = UIModalPresentationFullScreen;
-                [self presentViewController:vc animated:YES completion:nil];
+                [InstallerProgressViewController presentInstallerFrom:self
+                    jarPath:destPath
+                    title:[NSString stringWithFormat:@"Installing %@", destPath.lastPathComponent]
+                    jvmArgs:@[@"--installClient", installDir]
+                    completion:^(BOOL success, BOOL cancelled, int exitCode) {
+                        if (!success && !cancelled) {
+                            showDialog(@"Installer Failed", [NSString stringWithFormat:@"The installer exited with code %d. Check the log for details.", exitCode]);
+                        }
+                        UIKit_returnToSplitView();
+                    }];
             }]];
         }
 

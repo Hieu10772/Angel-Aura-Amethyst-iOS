@@ -142,12 +142,15 @@ public final class Tools {
     public static void launchMinecraft(MinecraftAccount profile, final JMinecraftVersionList.Version versionInfo) throws Throwable {
         System.out.println("[DEBUG] launchMinecraft: id=" + versionInfo.id + " inheritsFrom=" + versionInfo.inheritsFrom + " assets=" + versionInfo.assets + " mainClass=" + versionInfo.mainClass);
         injectVoxyMemoryStorageConfig();
+        // Forge/NeoForge/Fabric log4j configs write logs/latest.log relative to
+        // the process working directory; create it before the game's logging
+        // starts or its RollingRandomAccessFile appender fails to open.
+        try {
+            new File(System.getProperty("user.dir"), "logs").mkdirs();
+        } catch (Exception ignored) {}
         String mainClass = versionInfo.mainClass;
         if (mainClass != null && (mainClass.contains("fabric") || mainClass.contains("quilt"))) {
             neutralizeFabricLwjgl(versionInfo);
-            try {
-                new File(System.getProperty("user.dir"), "logs").mkdirs();
-            } catch (Exception ignored) {}
         }
         String[] launchArgs = getMinecraftArgs(profile, versionInfo);
         System.out.println("[DEBUG] Minecraft Args: " + Arrays.toString(launchArgs));
@@ -552,21 +555,22 @@ createLibraryInfo(libItem);
                        libItem.name.startsWith("org.ow2.asm:asm-commons:") ||
                        libItem.name.startsWith("org.ow2.asm:asm-tree:") ||
                        libItem.name.startsWith("org.ow2.asm:asm-util:")) {
-                // Replace ASM < 9.7.1 with 9.7.1 for Java 25 class file support (major version 69)
+                // Replace ASM < 9.9.1 with 9.9.1 for Java 25 class file support (major version 69).
+                // 9.7.1 (used by Quilt meta and NeoForge < 26.2) cannot read Java 25 class files.
                 if (version.length >= 2) {
                     int major = Integer.parseInt(version[0]);
                     int minor = Integer.parseInt(version[1]);
                     int patch = version.length > 2 ? Integer.parseInt(version[2]) : 0;
-                    if (major > 9 || (major == 9 && minor > 7) || (major == 9 && minor == 7 && patch >= 1)) {
+                    if (major > 9 || (major == 9 && minor > 9) || (major == 9 && minor == 9 && patch >= 1)) {
                         continue;
                     }
                 }
                 String asmArtifact = libParts[1];
                 createLibraryInfo(libItem);
-                libItem.name = "org.ow2.asm:" + asmArtifact + ":9.7.1";
+                libItem.name = "org.ow2.asm:" + asmArtifact + ":9.9.1";
                 libItem.url = "https://repo1.maven.org/maven2/";
-                libItem.downloads.artifact.path = "org/ow2/asm/" + asmArtifact + "/9.7.1/" + asmArtifact + "-9.7.1.jar";
-                libItem.downloads.artifact.url = "https://repo1.maven.org/maven2/org/ow2/asm/" + asmArtifact + "/9.7.1/" + asmArtifact + "-9.7.1.jar";
+                libItem.downloads.artifact.path = "org/ow2/asm/" + asmArtifact + "/9.9.1/" + asmArtifact + "-9.9.1.jar";
+                libItem.downloads.artifact.url = "https://repo1.maven.org/maven2/org/ow2/asm/" + asmArtifact + "/9.9.1/" + asmArtifact + "-9.9.1.jar";
             }
         }
     }
@@ -585,6 +589,36 @@ createLibraryInfo(libItem);
             String fullPath = Tools.DIR_HOME_LIBRARY + "/" + artifactToPath(libItem);
             if (!libDir.contains(fullPath)) {
                 libDir.add(fullPath);
+            }
+        }
+        // net.minecraft:launchwrapper:1.12 is required by Mixin's service
+        // discovery (MixinServiceLaunchWrapper must be instantiable) but is
+        // missing from the downloaded instance profiles. PojavLauncher copies
+        // the bundled jar here; append it if present.
+        File launchWrapperJar = new File(Tools.DIR_HOME_LIBRARY + "/net/minecraft/launchwrapper/1.12/launchwrapper-1.12.jar");
+        if (launchWrapperJar.exists() && !libDir.contains(launchWrapperJar.getAbsolutePath())) {
+            libDir.add(launchWrapperJar.getAbsolutePath());
+        }
+        // Forge 26.x keeps the "forge" system mod inside the *-universal.jar
+        // artifact, but the installed instance version JSON omits that
+        // classifier entry, so the jar never lands on the classpath and FML
+        // aborts with "Failed to find system mod: forge". Append every
+        // *-universal.jar shipped under libraries/net/minecraftforge/forge/.
+        File forgeLibRoot = new File(Tools.DIR_HOME_LIBRARY + "/net/minecraftforge/forge");
+        if (forgeLibRoot.isDirectory()) {
+            File[] forgeVersionDirs = forgeLibRoot.listFiles();
+            if (forgeVersionDirs != null) {
+                for (File forgeVersionDir : forgeVersionDirs) {
+                    if (!forgeVersionDir.isDirectory()) continue;
+                    File[] forgeJars = forgeVersionDir.listFiles();
+                    if (forgeJars == null) continue;
+                    for (File forgeJar : forgeJars) {
+                        if (forgeJar.getName().endsWith("-universal.jar")
+                                && !libDir.contains(forgeJar.getAbsolutePath())) {
+                            libDir.add(forgeJar.getAbsolutePath());
+                        }
+                    }
+                }
             }
         }
         return libDir.toArray(new String[0]);

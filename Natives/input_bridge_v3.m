@@ -477,7 +477,7 @@ void CallbackBridge_nativeSetInputReady(BOOL inputReady) {
             GLFW_invoke_FramebufferSize((void*) showingWindow, windowWidth, windowHeight);
         }
         if (GLFW_invoke_WindowSize) {
-            GLFW_invoke_FramebufferSize((void*) showingWindow, windowWidth, windowHeight);
+            GLFW_invoke_WindowSize((void*) showingWindow, windowWidth, windowHeight);
         }
     }
 }

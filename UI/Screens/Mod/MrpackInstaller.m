@@ -1,6 +1,7 @@
 #import "MrpackInstaller.h"
 #import "DownloadProgressOverlay.h"
 #import "DownloadManager.h"
+#import "InstallerProgressViewController.h"
 #import "VersionDirectoryManager.h"
 #import "JavaGUIViewController.h"
 #import "ModpackUtils.h"
@@ -203,6 +204,26 @@ static NSString *readInstallerVersionId(NSString *jarPath) {
                 [overlay updateProgress:0.82 message:@"Downloading loader profile..."];
                 dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
                     NSData *profileData = [NSData dataWithContentsOfURL:[NSURL URLWithString:profileUrl]];
+                    if (profileData && [loaderType isEqualToString:@"quilt"]) {
+                        // Quilt meta pins an old org.ow2.asm (9.5/9.7.1) that can't
+                        // read Java 25 (class major 69) class files, crashing the
+                        // loader with "Unsupported class file major version 69" while
+                        // discovering entrypoints. Bump all ASM artifacts to 9.9.1
+                        // (the version Forge/NeoForge 26.2 already use successfully).
+                        NSMutableDictionary *profileJson = [NSJSONSerialization JSONObjectWithData:profileData options:NSJSONReadingMutableContainers error:nil];
+                        if ([profileJson isKindOfClass:[NSDictionary class]]) {
+                            for (NSMutableDictionary *lib in profileJson[@"libraries"]) {
+                                NSString *name = lib[@"name"];
+                                if ([name hasPrefix:@"org.ow2.asm:"]) {
+                                    NSArray *parts = [name componentsSeparatedByString:@":"];
+                                    if (parts.count == 3) {
+                                        lib[@"name"] = [NSString stringWithFormat:@"%@:%@:9.9.1", parts[0], parts[1]];
+                                    }
+                                }
+                            }
+                            profileData = [NSJSONSerialization dataWithJSONObject:profileJson options:0 error:nil];
+                        }
+                    }
                     if (profileData) {
                         [[NSFileManager defaultManager] createDirectoryAtPath:loaderDir withIntermediateDirectories:YES attributes:nil error:nil];
                         [profileData writeToFile:loaderJsonPath atomically:YES];
@@ -267,11 +288,16 @@ static NSString *readInstallerVersionId(NSString *jarPath) {
                         getenv("POJAV_HOME") ?: "", VersionDirectoryManager.shared.currentInstance ?: @"default"];
                     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 0.5 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
                         [overlay dismiss];
-                        JavaGUIViewController *vc = [[JavaGUIViewController alloc] init];
-                        vc.filepath = installerPath;
-                        vc.jvmArgs = @[@"--installClient", installDir];
-                        vc.modalPresentationStyle = UIModalPresentationFullScreen;
-                        [hostVC presentViewController:vc animated:YES completion:nil];
+                        [InstallerProgressViewController presentInstallerFrom:hostVC
+                            jarPath:installerPath
+                            title:[NSString stringWithFormat:@"Installing %@ %@", isNeo ? @"NeoForge" : @"Forge", loaderVer2]
+                            jvmArgs:@[@"--installClient", installDir]
+                            completion:^(BOOL success, BOOL cancelled, int exitCode) {
+                                if (!success && !cancelled) {
+                                    showDialog(@"Installer Failed", [NSString stringWithFormat:@"The %@ installer exited with code %d. Check the log for details.", isNeo ? @"NeoForge" : @"Forge", exitCode]);
+                                }
+                                UIKit_returnToSplitView();
+                            }];
                     });
                 });
             });

@@ -619,6 +619,9 @@ int launchJVMWithArgs(NSString *username, id launchTarget, int width, int height
         if ([jarArgs isKindOfClass:NSArray.class] && jarArgs.count >= 2 &&
             [jarArgs[0] isEqualToString:@"--installClient"]) {
             margv[++margc] = [NSString stringWithFormat:@"-Dpojav.installDir=%@", jarArgs[1]].UTF8String;
+            // Marker file the InstallerProgressViewController writes when the user
+            // presses Cancel; the Java side halts the JVM once it appears.
+            margv[++margc] = [NSString stringWithFormat:@"-Dpojav.cancelFile=%s/installers/cancel-install", getenv("POJAV_HOME") ?: ""].UTF8String;
         }
     }
     margv[++margc] = "-cp";

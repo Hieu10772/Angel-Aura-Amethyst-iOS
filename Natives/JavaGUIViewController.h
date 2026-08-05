@@ -9,5 +9,6 @@
 @property(nonatomic) NSArray<NSString *> *jvmArgs;
 @property(nonatomic, readonly) int requiredJavaVersion;
 
++ (int)requiredJavaVersionForJar:(NSString *)filepath;
 - (void)setHitEnterAfterWindowShown:(BOOL)hitEnter;
 @end

@@ -364,22 +364,16 @@ dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
 }
 
 @synthesize requiredJavaVersion = _requiredJavaVersion;
-- (int)requiredJavaVersion {
-    if (_requiredJavaVersion) {
-        return _requiredJavaVersion;
-    }
-
++ (int)requiredJavaVersionForJar:(NSString *)filepath {
     NSError *error;
-    UZKArchive *archive = [[UZKArchive alloc] initWithPath:self.filepath error:&error];
+    UZKArchive *archive = [[UZKArchive alloc] initWithPath:filepath error:&error];
     if (error) {
-        [self showErrorMessage:error.localizedDescription];
-        return _requiredJavaVersion = 0;
+        return 0;
     }
 
     NSData *manifestData = [archive extractDataFromFile:@"META-INF/MANIFEST.MF" error:&error];
     if (error) {
-        [self showErrorMessage:error.localizedDescription];
-        return _requiredJavaVersion = 0;
+        return 0;
     }
 
     NSString *manifestStr = [[NSString alloc] initWithData:manifestData encoding:NSUTF8StringEncoding];
@@ -392,23 +386,19 @@ dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
         }
     }
     if (!mainClass) {
-        [self showErrorMessage:[NSString stringWithFormat:
-            localize(@"java.error.missing_main_class", nil), self.filepath.lastPathComponent]];
-        return _requiredJavaVersion = 0;
+        return 0;
     }
     mainClass = [NSString stringWithFormat:@"%@.class",
         [mainClass stringByReplacingOccurrencesOfString:@"." withString:@"/"]];
 
     NSData *mainClassData = [archive extractDataFromFile:mainClass error:&error];
     if (error) {
-        [self showErrorMessage:error.localizedDescription];
-        return _requiredJavaVersion = 0;
+        return 0;
     }
 
     uint32_t magic = OSSwapConstInt32(*(uint32_t*)mainClassData.bytes);
     if (magic != 0xCAFEBABE) {
-        [self showErrorMessage:[NSString stringWithFormat:@"Invalid magic number: 0x%x", magic]];
-        return _requiredJavaVersion = 0;
+        return 0;
     }
 
     uint16_t *version = (uint16_t *)(mainClassData.bytes+sizeof(magic));
@@ -416,7 +406,19 @@ dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
     uint16_t majorVer = OSSwapConstInt16(version[1]);
     NSLog(@"[ModInstaller] Main class version: %u.%u", majorVer, minorVer);
 
-    return _requiredJavaVersion = MAX(2, majorVer - 44);
+    return MAX(2, majorVer - 44);
+}
+
+- (int)requiredJavaVersion {
+    if (_requiredJavaVersion) {
+        return _requiredJavaVersion;
+    }
+    int result = [JavaGUIViewController requiredJavaVersionForJar:self.filepath];
+    if (result == 0) {
+        [self showErrorMessage:[NSString stringWithFormat:
+            localize(@"java.error.missing_main_class", nil), self.filepath.lastPathComponent]];
+    }
+    return _requiredJavaVersion = result;
 }
 
 - (void)showErrorMessage:(NSString *)message {

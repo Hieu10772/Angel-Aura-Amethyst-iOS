@@ -82,6 +82,27 @@ public class PojavLauncher {
             String[] jarArgs = (installDir != null && !installDir.isEmpty())
                 ? new String[]{"--installClient", installDir}
                 : new String[0];
+            // The ObjC installer progress UI writes a marker file to cancel the
+            // install; halt the JVM as soon as it appears (installers write their
+            // output synchronously, so a halt here is safe).
+            String cancelFile = System.getProperty("pojav.cancelFile");
+            if (cancelFile != null && !cancelFile.isEmpty()) {
+                final File cancelMarker = new File(cancelFile);
+                Thread cancelWatcher = new Thread(() -> {
+                    try {
+                        while (!cancelMarker.exists()) {
+                            Thread.sleep(400);
+                        }
+                        System.out.println("[Launcher] Install cancelled by user, stopping JVM");
+                        System.out.flush();
+                        Runtime.getRuntime().halt(130);
+                    } catch (InterruptedException e) {
+                        // watcher stopped
+                    }
+                }, "pojav-install-cancel-watcher");
+                cancelWatcher.setDaemon(true);
+                cancelWatcher.start();
+            }
             UIKit.callback_JavaGUIViewController_launchJarFile(runJar, jarArgs);
         } else {
             try {
@@ -224,6 +245,89 @@ public class PojavLauncher {
         }
     }
 
+    // net.minecraft:launchwrapper:1.12 is required by Mixin's service
+    // discovery (org.spongepowered.asm.service.mojang.MixinServiceLaunchWrapper
+    // must be instantiable on the classpath, otherwise the ServiceLoader loop
+    // in MixinService.initService dies with a fatal NoClassDefFoundError
+    // before it can reach the loader's own service -> Quilt: "LaunchClassLoader
+    // not found" before its Knot service is ever tried). The library is missing
+    // from the downloaded instance profiles and from its usual maven locations,
+    // so it is bundled into launcher.jar (resources/launchwrapper) and copied
+    // here; Tools.generateLibClasspath picks it up automatically.
+    private static void ensureLaunchWrapperLibrary() throws IOException {
+        byte[] jarBytes = readResourceBytes("/launchwrapper/launchwrapper-1.12.jar");
+        if (jarBytes == null) {
+            System.out.println("[MixinFix] bundled launchwrapper jar missing, skipping");
+            return;
+        }
+        File libFile = new File(Tools.DIR_HOME_LIBRARY + "/net/minecraft/launchwrapper/1.12/launchwrapper-1.12.jar");
+        if (libFile.exists() && libFile.length() == jarBytes.length) {
+            System.out.println("[MixinFix] launchwrapper-1.12.jar already installed");
+            return;
+        }
+        libFile.getParentFile().mkdirs();
+        Tools.write(libFile.getAbsolutePath(), jarBytes);
+        System.out.println("[MixinFix] installed " + libFile);
+    }
+
+    // Mixin's ServiceLoader iterates IMixinService providers in classpath
+    // order and dies fatally (MixinServiceException "No mixin host service
+    // available") when the first provider cannot be instantiated. The
+    // LaunchWrapper + ModLauncher providers shipped inside the sponge-mixin jar
+    // cannot be instantiated on iOS (net.minecraft.launchwrapper absent,
+    // cpw.mods.modlauncher absent), and on Fabric/Quilt the sponge-mixin jar
+    // sorts before the loader's own Knot service. Emptying its provider list
+    // lets the loader's own MixinServiceKnot be selected. The Forge/NeoForge
+    // mixin jars (named mixin-*) are not touched.
+    private static void patchSpongeMixinServices() {
+        int patched = 0;
+        List<File> jars = new ArrayList<>();
+        try {
+            Files.walk(new File(Tools.DIR_GAME_NEW).toPath())
+                .filter(p -> p.toString().endsWith(".jar"))
+                .forEach(p -> jars.add(p.toFile()));
+        } catch (IOException e) {
+            System.err.println("[MixinFix] walk failed: " + e);
+            return;
+        }
+        for (File jar : jars) {
+            String name = jar.getName();
+            if (!name.startsWith("sponge-mixin") || !name.endsWith(".jar")) continue;
+            try {
+                if (patchMixinServicesFile(jar)) patched++;
+            } catch (Exception e) {
+                System.err.println("[MixinFix] failed on " + jar + ": " + e);
+            }
+        }
+        System.out.println("[MixinFix] patched " + patched + " sponge-mixin jar(s)");
+    }
+
+    private static boolean patchMixinServicesFile(File jar) throws IOException {
+        byte[] providers = readJarEntry(jar, "META-INF/services/org.spongepowered.asm.service.IMixinService");
+        if (providers == null) return false;
+        if (providers.length == 0) return false; // already patched
+
+        File tmp = new File(jar.getParentFile(), jar.getName() + ".mixinfix.tmp");
+        byte[] buf = new byte[65536];
+        try (ZipInputStream zin = new ZipInputStream(new FileInputStream(jar));
+             ZipOutputStream zout = new ZipOutputStream(new FileOutputStream(tmp))) {
+            ZipEntry in;
+            while ((in = zin.getNextEntry()) != null) {
+                ZipEntry out = new ZipEntry(in.getName());
+                out.setTime(in.getTime());
+                zout.putNextEntry(out);
+                if (!in.getName().equals("META-INF/services/org.spongepowered.asm.service.IMixinService")) {
+                    int n;
+                    while ((n = zin.read(buf)) > 0) zout.write(buf, 0, n);
+                }
+                zout.closeEntry();
+            }
+        }
+        Files.move(tmp.toPath(), jar.toPath(), StandardCopyOption.REPLACE_EXISTING);
+        System.out.println("[MixinFix] emptied IMixinService providers in " + jar);
+        return true;
+    }
+
     public static void launchMinecraft(String[] args) throws Throwable {
         // Args for Spiral Knights
         System.setProperty("appdir", "./spiral");
@@ -311,6 +415,16 @@ public class PojavLauncher {
             patchInstanceLwjgl();
         } catch (Throwable t) {
             System.err.println("[LWJGLFix] patch failed: " + t);
+        }
+        try {
+            ensureLaunchWrapperLibrary();
+        } catch (Throwable t) {
+            System.err.println("[MixinFix] launchwrapper install failed: " + t);
+        }
+        try {
+            patchSpongeMixinServices();
+        } catch (Throwable t) {
+            System.err.println("[MixinFix] sponge-mixin services patch failed: " + t);
         }
 
         Tools.launchMinecraft(account, version);
