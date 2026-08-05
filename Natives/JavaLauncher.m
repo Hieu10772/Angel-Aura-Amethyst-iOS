@@ -536,11 +536,32 @@ int launchJVMWithArgs(NSString *username, id launchTarget, int width, int height
     margv[++margc] = "-XX:+UseParallelGC";
     margv[++margc] = "-XX:ParallelGCThreads=2";
 
-    // On iOS 26+, use mirror mapped JIT for better code cache performance.
+    // On iOS 26.x, use mirror mapped JIT for better code cache performance.
     // JDK 25 (jre25-ios-v10+) has the mirror_mapping HotSpot patch applied,
     // so MirrorMappedCodeCache works correctly. Enable for all Java versions.
-    if (@available(iOS 26.0, *)) {
+    //
+    // On iOS 27 the mirror path has been observed to crash (SIGBUS W^X on
+    // A15 + Java 25, SIGSEGV in pthread_mutex_lock on A14 + Java 21) while
+    // the classic JIT26 path (debugger-allocated RX region) works on A15 +
+    // Java 21, so mirror mapping is now disabled by default on iOS 27.
+    // Override with debug.mirror_mapped_code_cache: -1 = auto, 0 = off, 1 = on.
+    BOOL mirrorEnabled;
+    NSInteger mirrorOverride = getPrefInt(@"debug.mirror_mapped_code_cache");
+    if (mirrorOverride >= 0) {
+        mirrorEnabled = mirrorOverride > 0;
+        NSLog(@"[JavaLauncher] MirrorMappedCodeCache override set to %s", mirrorEnabled ? "ON" : "OFF");
+    } else if (@available(iOS 27.0, *)) {
+        mirrorEnabled = NO;
+    } else if (@available(iOS 26.0, *)) {
+        mirrorEnabled = YES;
+    } else {
+        mirrorEnabled = NO;
+    }
+    if (mirrorEnabled) {
         margv[++margc] = "-XX:+MirrorMappedCodeCache";
+        NSLog(@"[JavaLauncher] MirrorMappedCodeCache enabled on iOS %ld.%ld", (long)NSProcessInfo.processInfo.operatingSystemVersion.majorVersion, (long)NSProcessInfo.processInfo.operatingSystemVersion.minorVersion);
+    } else {
+        NSLog(@"[JavaLauncher] MirrorMappedCodeCache disabled on iOS %ld.%ld (classic JIT26 path)", (long)NSProcessInfo.processInfo.operatingSystemVersion.majorVersion, (long)NSProcessInfo.processInfo.operatingSystemVersion.minorVersion);
     }
 
     // Disable Forge 1.16.x early progress window

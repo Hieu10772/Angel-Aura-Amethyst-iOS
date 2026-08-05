@@ -174,6 +174,8 @@ NSMutableArray<NSDictionary *> *localVersionList, *remoteVersionList;
     }
     BOOL hasLoaderJvmArgs = NO;
     for (NSString *arg in json[@"arguments"][@"jvm"]) {
+        // "jvm" entries can be rule-based dicts (e.g. vanilla 1.13+), not just strings
+        if (![arg isKindOfClass:NSString.class]) continue;
         if ([arg containsString:@"bootstraplauncher"] ||
             [arg containsString:@"${library_directory}"] ||
             [arg containsString:@"${version_name}"]) {
@@ -192,6 +194,7 @@ NSMutableArray<NSDictionary *> *localVersionList, *remoteVersionList;
     };
     int argsToSkip = 0;
     for (NSString *arg in json[@"arguments"][@"jvm"]) {
+        if (![arg isKindOfClass:NSString.class]) continue;
         if (argsToSkip == 0) {
             argsToSkip = [self numberOfArgsToSkipForArg:arg];
         }

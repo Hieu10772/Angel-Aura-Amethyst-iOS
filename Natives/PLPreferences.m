@@ -103,6 +103,7 @@
         [defaults[@"general"] addEntriesFromDictionary:general];
         defaults[@"debug"] = @{
             @"debug_always_attached_jit": @NO,
+            @"debug_mirror_mapped_code_cache": @(-1),
             @"debug_skip_wait_jit": @NO,
             @"debug_hide_home_indicator": @NO,
             @"debug_ipad_ui": @(realUIIdiom == UIUserInterfaceIdiomPad),

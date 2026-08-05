@@ -1,3 +1,19 @@
+# AngelAuraAmethyst iOS — 1.1.3-beta.7
+
+## 🇬🇧 English
+- Fixed a crash ("`-[__NSDictionaryM containsString:]`") when launching Minecraft 1.13+ versions — rule-based JVM arguments (dictionary entries like `{"rules": …}` in `arguments.jvm`) are now skipped instead of being treated as strings.
+- iOS 27 JIT stability: the mirror-mapped code cache path (observed crashing with SIGBUS W^X / SIGSEGV on some A14/A15 devices with Java 21/25) is now **disabled by default on iOS 27**, falling back to the classic JIT26 path. Override with the hidden preference `debug.mirror_mapped_code_cache` (-1 auto / 0 off / 1 on).
+- Updated the Universal JIT script to match StikDebug 3.1.x (improved signal handling) and added explicit error reporting when the debugger is too old to grant JIT execution.
+- iOS 27 note: use **StikDebug 3.1.6 or newer** (3.1.9 recommended) — older builds cannot grant JIT on iOS 27.
+
+## 🇻🇳 Tiếng Việt
+- Sửa crash ("`-[__NSDictionaryM containsString:]`") khi chạy Minecraft 1.13+ — các đối số JVM dạng rule (entry là dictionary như `{"rules": …}` trong `arguments.jvm`) giờ được bỏ qua thay vì xử lý như chuỗi.
+- Ổn định JIT trên iOS 27: mirror-mapped code cache (từng gây crash SIGBUS W^X / SIGSEGV trên một số máy A14/A15 với Java 21/25) giờ **tắt mặc định trên iOS 27**, chuyển về path JIT26 cổ điển. Có thể ghi đè bằng pref ẩn `debug.mirror_mapped_code_cache` (-1 tự động / 0 tắt / 1 bật).
+- Cập nhật Universal JIT script khớp StikDebug 3.1.x (xử lý tín hiệu cải thiện) và báo lỗi rõ ràng khi debugger quá cũ không cấp được JIT.
+- Lưu ý iOS 27: hãy dùng **StikDebug 3.1.6 trở lên** (khuyến nghị 3.1.9) — bản cũ không cấp được JIT trên iOS 27.
+
+---
+
 # AngelAuraAmethyst iOS — 1.1.3-beta.6
 
 ## 🇬🇧 English
