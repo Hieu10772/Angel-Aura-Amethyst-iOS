@@ -1,4 +1,4 @@
-package net.kdt.pojavlaunch;
+package net.kdt.pojavlaunch.cacioinitagent;
 
 import java.lang.instrument.Instrumentation;
 import java.lang.reflect.Constructor;

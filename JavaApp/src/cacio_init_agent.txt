@@ -1,1 +1,1 @@
-Premain-Class: net.kdt.pojavlaunch.CacioInitAgent
+Premain-Class: net.kdt.pojavlaunch.cacioinitagent.CacioInitAgent

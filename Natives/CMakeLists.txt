@@ -29,6 +29,7 @@ include_directories(
   "external/mach"
   "../UI"
   "../UI/Common"
+  "../UI/Common/MMMarkdown"
   "../UI/Root"
   "../UI/App"
   "../UI/Managers"
@@ -284,6 +285,14 @@ egl_bridge.m
    # UI
    ../UI/Common/ThemeManager.m
    ../UI/Common/MarkdownRenderer.m
+   ../UI/Common/MMMarkdown/MMDocument.m
+   ../UI/Common/MMMarkdown/MMElement.m
+   ../UI/Common/MMMarkdown/MMGenerator.m
+   ../UI/Common/MMMarkdown/MMHTMLParser.m
+   ../UI/Common/MMMarkdown/MMMarkdown.m
+   ../UI/Common/MMMarkdown/MMParser.m
+   ../UI/Common/MMMarkdown/MMScanner.m
+   ../UI/Common/MMMarkdown/MMSpanParser.m
    ../UI/Common/HapticManager.m
    ../UI/Common/CustomButton.m
    ../UI/Common/CustomSlider.m
@@ -291,6 +300,7 @@ egl_bridge.m
    ../UI/Common/TransitionAnimator.m
    ../UI/Common/UIView+AmethystExtensions.m
    ../UI/Common/DownloadProgressOverlay.m
+   ../UI/Common/InstallerProgressViewController.m
     ../UI/Common/AmethystProjectCell.m
     ../UI/Common/UIView+LiquidGlass.m
     ../UI/Root/AmethystRootViewController.m

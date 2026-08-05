@@ -114,10 +114,42 @@ static const NSTimeInterval NewsRefreshInterval = 300.0; // 5 minutes
                 }
                 return;
             }
-            self.cachedMarkdown = markdown;
+            self.cachedMarkdown = [self markdownForCurrentVersion:markdown];
             [self renderNews];
         });
     }] resume];
+}
+
+// news.md holds one "# … — <version>" section per release. Only keep the
+// section matching the running launcher version; fall back to the whole
+// file when the version isn't listed.
+- (NSString *)markdownForCurrentVersion:(NSString *)markdown {
+    NSString *appVersion = NSBundle.mainBundle.infoDictionary[@"CFBundleShortVersionString"];
+    if (appVersion.length == 0) return markdown;
+
+    NSMutableArray<NSString *> *sections = [NSMutableArray array];
+    NSMutableString *currentSection = [NSMutableString string];
+
+    for (NSString *line in [markdown componentsSeparatedByString:@"\n"]) {
+        if ([line hasPrefix:@"# "] && ![line hasPrefix:@"## "]) {
+            if (currentSection.length > 0) {
+                [sections addObject:currentSection];
+            }
+            currentSection = [NSMutableString stringWithString:line];
+        } else if (currentSection.length > 0) {
+            [currentSection appendFormat:@"\n%@", line];
+        }
+    }
+    if (currentSection.length > 0) {
+        [sections addObject:currentSection];
+    }
+
+    for (NSString *section in sections) {
+        if ([section containsString:appVersion]) {
+            return section;
+        }
+    }
+    return markdown;
 }
 
 - (void)renderNews {

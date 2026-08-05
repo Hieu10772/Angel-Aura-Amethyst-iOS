@@ -40,8 +40,16 @@ $(OUTPUTDIR)/launcher.jar: $(CLASSES)
 	@cp -r $(SOURCEDIR)/launcher/META-INF $(basename $@)/ 2>/dev/null || true
 	@mkdir -p $(basename $@)/lwjglfix
 	@unzip -o -p libs/lwjgl41/lwjgl.jar org/lwjgl/system/Library.class > $(basename $@)/lwjglfix/Library.class
+	@mkdir -p $(basename $@)/launchwrapper
+	@cp libs/launchwrapper-1.12.jar $(basename $@)/launchwrapper/launchwrapper-1.12.jar
 	@find $(basename $@) -name '*.class' -size 0 | grep -v '\$$' && { echo "Error: found empty class files"; exit 1; } || true
 	@$(BOOTJDK)/jar -cf $@ -C $(basename $@) .
+	# com.apple.ios.audio must live in EXACTLY ONE jar so it is exported by
+	# only one module. It stays in launcher.jar (module "launcher") and is
+	# stripped from the lwjgl jars below; otherwise the Forge 26.x bootstrap
+	# sees "Modules launcher and lwjgl export package com.apple.ios.audio" and
+	# aborts with a ResolutionException. The class files must stay on disk
+	# so they keep working from the launcher jar.
 
 # Build LWJGL 3.3.3
 $(OUTPUTDIR)/lwjgl-3.3.3.jar: $(CLASSES)
@@ -52,10 +60,6 @@ $(OUTPUTDIR)/lwjgl-3.3.3.jar: $(CLASSES)
 	@cd $(OUTPUTDIR)/lwjgl33_lib && find ../../libs/lwjgl -name 'lwjgl*.jar' ! -name 'lwjgl.jar' -exec $(BOOTJDK)/jar -xf {} \; && rm -rf META-INF
 	@cd $(OUTPUTDIR)/lwjgl33_lib && $(BOOTJDK)/jar -xf "../../libs/lwjgl/lwjgl.jar" && rm -rf META-INF
 	@cp -R $(OUTPUTDIR)/lwjgl/* $(OUTPUTDIR)/lwjgl33_lib/
-	@mkdir -p $(OUTPUTDIR)/lwjgl33_lib/com/apple/ios/audio
-	@cp -R $(OUTPUTDIR)/launcher/com/apple/ios/audio/*.class $(OUTPUTDIR)/lwjgl33_lib/com/apple/ios/audio/
-	@mkdir -p $(OUTPUTDIR)/lwjgl33_lib/META-INF/services
-	@cp $(SOURCEDIR)/launcher/META-INF/services/javax.sound.sampled.spi.MixerProvider $(OUTPUTDIR)/lwjgl33_lib/META-INF/services/
 	@$(BOOTJDK)/jar -cf $@ -C $(OUTPUTDIR)/lwjgl33_lib .
 
 # Build LWJGL 3.3.6
@@ -67,10 +71,6 @@ $(OUTPUTDIR)/lwjgl-3.3.6.jar: $(CLASSES)
 	@cd $(OUTPUTDIR)/lwjgl36_lib && find ../../libs/lwjgl36 -name 'lwjgl*.jar' ! -name 'lwjgl.jar' -exec $(BOOTJDK)/jar -xf {} \; && rm -rf META-INF
 	@cd $(OUTPUTDIR)/lwjgl36_lib && $(BOOTJDK)/jar -xf "../../libs/lwjgl36/lwjgl.jar" && rm -rf META-INF
 	@cp -R $(OUTPUTDIR)/lwjgl/* $(OUTPUTDIR)/lwjgl36_lib/
-	@mkdir -p $(OUTPUTDIR)/lwjgl36_lib/com/apple/ios/audio
-	@cp -R $(OUTPUTDIR)/launcher/com/apple/ios/audio/*.class $(OUTPUTDIR)/lwjgl36_lib/com/apple/ios/audio/
-	@mkdir -p $(OUTPUTDIR)/lwjgl36_lib/META-INF/services
-	@cp $(SOURCEDIR)/launcher/META-INF/services/javax.sound.sampled.spi.MixerProvider $(OUTPUTDIR)/lwjgl36_lib/META-INF/services/
 	@$(BOOTJDK)/jar -cf $@ -C $(OUTPUTDIR)/lwjgl36_lib .
 
 $(OUTPUTDIR)/lwjgl-3.4.1.jar: $(CLASSES)
@@ -81,10 +81,10 @@ $(OUTPUTDIR)/lwjgl-3.4.1.jar: $(CLASSES)
 	@cd $(OUTPUTDIR)/lwjgl41_lib && find ../../libs/lwjgl41 -name 'lwjgl*.jar' ! -name 'lwjgl.jar' -exec $(BOOTJDK)/jar -xf {} \; && rm -rf META-INF
 	@cd $(OUTPUTDIR)/lwjgl41_lib && $(BOOTJDK)/jar -xf "../../libs/lwjgl41/lwjgl.jar" && rm -rf META-INF
 	@cp -R $(OUTPUTDIR)/lwjgl/* $(OUTPUTDIR)/lwjgl41_lib/
-	@mkdir -p $(OUTPUTDIR)/lwjgl41_lib/com/apple/ios/audio
-	@cp -R $(OUTPUTDIR)/launcher/com/apple/ios/audio/*.class $(OUTPUTDIR)/lwjgl41_lib/com/apple/ios/audio/
-	@mkdir -p $(OUTPUTDIR)/lwjgl41_lib/META-INF/services
-	@cp $(SOURCEDIR)/launcher/META-INF/services/javax.sound.sampled.spi.MixerProvider $(OUTPUTDIR)/lwjgl41_lib/META-INF/services/
+	# Forge 26.2 builds a JPMS layer containing the classpath jars; the merged
+	# org/jspecify from lwjgl-core would split the package with the real
+	# org.jspecify:jspecify jar -> "Split package: org.jspecify". Strip it.
+	@rm -rf $(OUTPUTDIR)/lwjgl41_lib/org/jspecify
 	@$(BOOTJDK)/jar -cf $@ -C $(OUTPUTDIR)/lwjgl41_lib .
 
 # Legacy alias
