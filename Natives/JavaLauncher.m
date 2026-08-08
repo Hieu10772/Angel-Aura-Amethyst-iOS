@@ -1,6 +1,5 @@
 #include <mach/mach.h>
 #include <mach/task.h>
-#include <os/proc.h>
 #include <dirent.h>
 #include <dlfcn.h>
 #include <errno.h>
@@ -33,35 +32,13 @@ static void checkAndAddDhNativeLibPath(NSString *versionId);
 
 extern char **environ;
 
-// os_proc_available_memory() returns the bytes remaining before the current
-// process hits its dirty memory (Jetsam) limit — i.e. the actual kill limit
-// the OS applies to this process, unlike physical RAM or host free pages.
-// Non-jailbroken apps run under a fixed, dynamically-shrinking Jetsam limit,
-// so this is the only honest number to size the Java heap from.
-static size_t availableMemoryMB(void) {
-    size_t avail = os_proc_available_memory();
-    if (avail == 0) {
-        return 0;
-    }
-    return (size_t)(avail / (1024 * 1024));
-}
-
-// Probes how much contiguous virtual memory (in MB) the process can actually
-// map, retrying with progressively smaller sizes so a single transient
-// mmap failure (e.g. momentary memory pressure) does not block the launch.
-// Returns the largest usable amount (>= minSizeMB), or 0 if even that fails.
-size_t validateVirtualMemorySpace(size_t sizeMB) {
-    const size_t minSizeMB = 384;
-    while (sizeMB >= minSizeMB) {
-        size_t bytes = sizeMB << 20;
-        void *map = mmap(0, bytes, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-        if (map != MAP_FAILED && munmap(map, bytes) == 0) {
-            return sizeMB;
-        }
-        NSLog(@"[JavaLauncher] Unable to map %zu MB of contiguous virtual memory, retrying with a smaller size", sizeMB);
-        sizeMB = sizeMB * 4 / 5;
-    }
-    return 0;
+BOOL validateVirtualMemorySpace(size_t size) {
+    size <<= 20; // convert to MB
+    void *map = mmap(0, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    // check if process successfully maps and unmaps a contiguous range
+    if(map == MAP_FAILED || munmap(map, size) != 0)
+        return NO;
+    return YES;
 }
 
 void init_loadDefaultEnv() {
@@ -383,31 +360,11 @@ int launchJVMWithArgs(NSString *username, id launchTarget, int width, int height
     if (getPrefBool(@"java.auto_ram")) {
         CGFloat autoRatio = getEntitlementValue(@"com.apple.private.memorystatus") ? 0.4 : 0.25;
         allocmem = roundf((NSProcessInfo.processInfo.physicalMemory / 1048576) * autoRatio);
-        if (!getEntitlementValue(@"com.apple.private.memorystatus")) {
-            // Non-jailbroken devices run under a fixed Jetsam dirty-memory
-            // limit that shrinks under system memory pressure. Sizing the
-            // heap from physical RAM over-allocates there: the launch probe
-            // fails ("insufficient RAM, clean your RAM") and when it does
-            // pass, the game gets Jetsam-killed shortly after. Cap the auto
-            // allocation at 60% of the actual remaining allowance (heap) so
-            // it always fits under the kill limit with headroom for the JVM
-            // overhead, native GL/Metal buffers and Minecraft's own usage.
-            size_t availableMem = availableMemoryMB();
-            if (availableMem > 0) {
-                int byAllowance = (int)((double)availableMem * 0.6);
-                if (byAllowance < allocmem) {
-                    NSLog(@"[JavaLauncher] Auto RAM capped: %d MB -> %d MB (%zu MB remaining before Jetsam kill limit)",
-                          allocmem, byAllowance, availableMem);
-                    allocmem = (int)MAX(384, byAllowance);
-                }
-            }
-        }
     } else {
         allocmem = getPrefInt(@"java.allocated_memory");
     }
     NSLog(@"[JavaLauncher] Max RAM allocation is set to %d MB", allocmem);
-    size_t usableMem = validateVirtualMemorySpace((size_t)allocmem);
-    if (usableMem == 0) {
+    if (!validateVirtualMemorySpace(allocmem)) {
         UIKit_returnToSplitView();
         if (getEntitlementValue(@"com.apple.developer.kernel.increased-memory-limit")) {
             showDialog(localize(@"Error", nil), @"Insufficient contiguous virtual memory space. Lower memory allocation and try again.");
@@ -415,10 +372,6 @@ int launchJVMWithArgs(NSString *username, id launchTarget, int width, int height
             showDialog(localize(@"Error", nil), @"Insufficient contiguous virtual memory space. Increased Memory Limit entitlement is missing, please add it via GetMoreRam app.");
         }
         return 1;
-    }
-    if (usableMem < (size_t)allocmem) {
-        NSLog(@"[JavaLauncher] Virtual memory probe limited allocation: %d MB -> %zu MB", allocmem, usableMem);
-        allocmem = (int)usableMem;
     }
 
     int margc = -1;
@@ -536,32 +489,11 @@ int launchJVMWithArgs(NSString *username, id launchTarget, int width, int height
     margv[++margc] = "-XX:+UseParallelGC";
     margv[++margc] = "-XX:ParallelGCThreads=2";
 
-    // On iOS 26.x, use mirror mapped JIT for better code cache performance.
+    // On iOS 26+, use mirror mapped JIT for better code cache performance.
     // JDK 25 (jre25-ios-v10+) has the mirror_mapping HotSpot patch applied,
     // so MirrorMappedCodeCache works correctly. Enable for all Java versions.
-    //
-    // On iOS 27 the mirror path has been observed to crash (SIGBUS W^X on
-    // A15 + Java 25, SIGSEGV in pthread_mutex_lock on A14 + Java 21) while
-    // the classic JIT26 path (debugger-allocated RX region) works on A15 +
-    // Java 21, so mirror mapping is now disabled by default on iOS 27.
-    // Override with debug.mirror_mapped_code_cache: -1 = auto, 0 = off, 1 = on.
-    BOOL mirrorEnabled;
-    NSInteger mirrorOverride = getPrefInt(@"debug.mirror_mapped_code_cache");
-    if (mirrorOverride >= 0) {
-        mirrorEnabled = mirrorOverride > 0;
-        NSLog(@"[JavaLauncher] MirrorMappedCodeCache override set to %s", mirrorEnabled ? "ON" : "OFF");
-    } else if (@available(iOS 27.0, *)) {
-        mirrorEnabled = NO;
-    } else if (@available(iOS 26.0, *)) {
-        mirrorEnabled = YES;
-    } else {
-        mirrorEnabled = NO;
-    }
-    if (mirrorEnabled) {
+    if (@available(iOS 26.0, *)) {
         margv[++margc] = "-XX:+MirrorMappedCodeCache";
-        NSLog(@"[JavaLauncher] MirrorMappedCodeCache enabled on iOS %ld.%ld", (long)NSProcessInfo.processInfo.operatingSystemVersion.majorVersion, (long)NSProcessInfo.processInfo.operatingSystemVersion.minorVersion);
-    } else {
-        NSLog(@"[JavaLauncher] MirrorMappedCodeCache disabled on iOS %ld.%ld (classic JIT26 path)", (long)NSProcessInfo.processInfo.operatingSystemVersion.majorVersion, (long)NSProcessInfo.processInfo.operatingSystemVersion.minorVersion);
     }
 
     // Disable Forge 1.16.x early progress window

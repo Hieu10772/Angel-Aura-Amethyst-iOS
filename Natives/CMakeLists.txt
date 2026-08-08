@@ -247,13 +247,13 @@ add_executable(AngelAuraAmethyst
   input/ControllerInput.m
   input/GyroInput.m
   input/KeyboardInput.m
+  input/TelexInput.m
 
   AccountListViewController.m
   AppDelegate.m
   CustomControlsViewController.m
   CustomControlsViewController+UndoManager.m
   DownloadProgressViewController.m
-  CursorFileDecoder.m
   FileListViewController.m
   GameSurfaceView.m
   JavaGUIViewController.m
@@ -263,7 +263,6 @@ add_executable(AngelAuraAmethyst
   LauncherPrefManageJREViewController.m
   MinecraftResourceDownloadTask.m
   MinecraftResourceUtils.m
-  MousePointerFactory.m
   PickTextField.m
   PLLogOutputView.m
   PLPickerView.m
@@ -312,6 +311,7 @@ egl_bridge.m
    ../UI/App/MainCoordinator.m
    ../UI/Managers/VersionDirectoryManager.m
    ../UI/Managers/DownloadManager.m
+   ../UI/Managers/CursorManager.m
    ../UI/Screens/MainMenu/MainMenuViewController.m
    ../UI/Screens/Game/GameListViewController.m
    ../UI/Screens/Mod/ModListViewController.m
@@ -323,6 +323,8 @@ egl_bridge.m
    ../UI/Screens/Shader/ShaderListViewController.m
    ../UI/Screens/Server/ServerListViewController.m
    ../UI/Screens/Settings/SettingsViewController.m
+   ../UI/Screens/Settings/CursorManageViewController.m
+   ../UI/Screens/Settings/CursorHitboxEditorViewController.m
    ../UI/Screens/Account/AccountViewController.m
    ../UI/Screens/ProfileSettings/ProfileSettingsViewController.m
    ../UI/Screens/Download/DownloadHubViewController.m

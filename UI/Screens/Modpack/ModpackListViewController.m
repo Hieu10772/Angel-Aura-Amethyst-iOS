@@ -22,6 +22,8 @@
 @property (nonatomic) NSMutableArray *pageOffsets;
 @property (nonatomic) BOOL hasMore;
 @property (nonatomic) BOOL isLoadingMore;
+@property (nonatomic) BOOL isRestoringPage;
+@property (nonatomic) BOOL adjustingContentOffset;
 @property (nonatomic) NSString *currentQuery;
 @property (nonatomic) NSInteger pageSize;
 @end
@@ -35,7 +37,7 @@
     _hasMore = YES;
     _isLoadingMore = NO;
     _modpacks = [NSMutableArray array];
-    _pageSize = 20;
+    _pageSize = 50;
     [self setup];
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(updateColors) name:ThemeDidChangeNotification object:nil];
     [self updateColors];
@@ -223,59 +225,92 @@
     CGFloat adjustedOffset = offsetY - removeCount * 64;
     if (adjustedOffset < 0) adjustedOffset = 0;
 
+    // Only drop the offsets that left the screen; keep cached pages so
+    // restorePreviousModpackPage can put the trimmed rows back on scroll-up.
+    NSInteger remainingRemove = removeCount;
     while (self.pageOffsets.count > 0) {
         NSNumber *firstOffset = self.pageOffsets.firstObject;
         NSArray *page = self.pageCache[firstOffset];
         if (!page) { [self.pageOffsets removeObjectAtIndex:0]; continue; }
-        if (page.count <= removeCount) {
-            removeCount -= page.count;
+        if (page.count <= remainingRemove) {
+            remainingRemove -= page.count;
             [self.pageOffsets removeObjectAtIndex:0];
         } else {
             break;
         }
     }
 
+    // Programmatic offset changes must not re-trigger loadMore/restore.
+    self.adjustingContentOffset = YES;
     self.tableView.contentOffset = CGPointMake(0, adjustedOffset);
+    self.adjustingContentOffset = NO;
+    [self.tableView reloadData];
 }
 
 - (void)loadMoreModpacks {
-    if (_isLoadingMore || !_hasMore) return;
+    if (_isLoadingMore || !_hasMore || _isRestoringPage) return;
     NSInteger nextOffset = _pageOffsets.count > 0 ? [_pageOffsets.lastObject integerValue] + 50 : 50;
     [self loadModpacksWithQuery:_currentQuery ?: @"" offset:nextOffset];
 }
 
 - (void)restorePreviousModpackPage {
-    if (_pageOffsets.count == 0) return;
+    if (_pageOffsets.count == 0 || _isRestoringPage || _isLoadingMore) return;
+    _isRestoringPage = YES;
     NSNumber *firstOffset = _pageOffsets.firstObject;
-    if ([firstOffset integerValue] <= 0) return;
+    if ([firstOffset integerValue] <= 0) { _isRestoringPage = NO; return; }
     NSNumber *prevOffset = @([firstOffset integerValue] - 50);
     NSArray *cachedPage = _pageCache[prevOffset];
-    if (!cachedPage) return;
+    if (!cachedPage) { _isRestoringPage = NO; return; }
 
     NSIndexSet *indexes = [NSIndexSet indexSetWithIndexesInRange:NSMakeRange(0, cachedPage.count)];
     [self.modpacks insertObjects:cachedPage atIndexes:indexes];
     [_pageOffsets insertObject:prevOffset atIndex:0];
 
     CGFloat offsetY = self.tableView.contentOffset.y;
+    self.adjustingContentOffset = YES;
     [self.tableView reloadData];
     self.tableView.contentOffset = CGPointMake(0, offsetY + cachedPage.count * 64);
+    self.adjustingContentOffset = NO;
+    _isRestoringPage = NO;
 }
 
 #pragma mark - Scroll (pagination)
 
 - (void)scrollViewDidScroll:(UIScrollView *)scrollView {
-    if (scrollView != _tableView) return;
+    if (scrollView != _tableView || _adjustingContentOffset) return;
     CGFloat offsetY = scrollView.contentOffset.y;
     CGFloat contentHeight = scrollView.contentSize.height;
     CGFloat frameHeight = scrollView.frame.size.height;
 
-    if (offsetY > contentHeight - frameHeight - 150 && _hasMore && !_isLoadingMore && _modpacks.count > 0) {
+    if (offsetY > contentHeight - frameHeight - 150 && _hasMore && !_isLoadingMore && !_isRestoringPage && _modpacks.count > 0 && scrollView.isDragging) {
         [self loadMoreModpacks];
     }
-    if (offsetY < 80 && !_isLoadingMore && _pageOffsets.count > 0) {
+    if (offsetY < 80 && !_isLoadingMore && !_isRestoringPage && _pageOffsets.count > 0 && scrollView.isDragging) {
         if ([_pageOffsets.firstObject integerValue] > 0) {
             [self restorePreviousModpackPage];
         }
+    }
+}
+
+// Load one more page when a flick/drag releases near the bottom.
+- (void)scrollViewDidEndDragging:(UIScrollView *)scrollView willDecelerate:(BOOL)decelerate {
+    if (decelerate) return;
+    if (scrollView != _tableView || _adjustingContentOffset || _isLoadingMore || !_hasMore) return;
+    CGFloat offsetY = scrollView.contentOffset.y;
+    CGFloat contentHeight = scrollView.contentSize.height;
+    CGFloat frameHeight = scrollView.frame.size.height;
+    if (offsetY > contentHeight - frameHeight - 150 && _modpacks.count > 0) {
+        [self loadMoreModpacks];
+    }
+}
+
+- (void)scrollViewDidEndDecelerating:(UIScrollView *)scrollView {
+    if (scrollView != _tableView || _adjustingContentOffset || _isLoadingMore || !_hasMore) return;
+    CGFloat offsetY = scrollView.contentOffset.y;
+    CGFloat contentHeight = scrollView.contentSize.height;
+    CGFloat frameHeight = scrollView.frame.size.height;
+    if (offsetY > contentHeight - frameHeight - 150 && _modpacks.count > 0) {
+        [self loadMoreModpacks];
     }
 }
 

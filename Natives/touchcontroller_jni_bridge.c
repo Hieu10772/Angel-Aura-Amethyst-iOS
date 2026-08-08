@@ -58,7 +58,12 @@ void touchcontroller_jni_init(JavaVM* vm) {
 static JNIEnv* ensure_ready(void) {
     if (g_javaVM == NULL) return NULL;
     JNIEnv* env;
-    if ((*g_javaVM)->AttachCurrentThread(g_javaVM, &env, NULL) != JNI_OK) {
+    // Attach as daemon: touch events can be produced by GCD worker threads
+    // that outlive the game's main() and never terminate. A non-daemon
+    // attached thread would keep DestroyJavaVM blocked forever after
+    // "Stopping!", forcing the ClientShutdownWatchdog crash report
+    // ("Client shutdown from post-main").
+    if ((*g_javaVM)->AttachCurrentThreadAsDaemon(g_javaVM, &env, NULL) != JNI_OK) {
         return NULL;
     }
     if (g_touchControllerManagerClass == NULL || g_onTouchDownMethod == NULL) {

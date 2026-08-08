@@ -46,7 +46,7 @@
             @"mouse_scale": @(100),
             @"mouse_speed": @(100),
             @"virtmouse_enable": @NO,
-            @"mouse_pointer_style": @"default",
+            @"virtmouse_cursor": @"default",
             @"gyroscope_enable": @NO,
             @"gyroscope_invert_x_axis": @NO,
             @"gyroscope_sensitivity": @(100),
@@ -103,7 +103,6 @@
         [defaults[@"general"] addEntriesFromDictionary:general];
         defaults[@"debug"] = @{
             @"debug_always_attached_jit": @NO,
-            @"debug_mirror_mapped_code_cache": @(-1),
             @"debug_skip_wait_jit": @NO,
             @"debug_hide_home_indicator": @NO,
             @"debug_ipad_ui": @(realUIIdiom == UIUserInterfaceIdiomPad),

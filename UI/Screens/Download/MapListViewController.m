@@ -21,6 +21,8 @@
 @property (nonatomic) NSMutableArray *pageOffsets;
 @property (nonatomic) BOOL hasMore;
 @property (nonatomic) BOOL isLoadingMore;
+@property (nonatomic) BOOL isRestoringPage;
+@property (nonatomic) BOOL adjustingContentOffset;
 @property (nonatomic) NSString *currentQuery;
 @end
 
@@ -189,43 +191,69 @@
 }
 
 - (void)loadMoreMaps {
-    if (_isLoadingMore || !_hasMore) return;
+    if (_isLoadingMore || !_hasMore || _isRestoringPage) return;
     NSInteger nextOffset = _pageOffsets.count > 0 ? [_pageOffsets.lastObject integerValue] + 50 : 50;
     [self loadMapsWithQuery:_currentQuery ?: @"" offset:nextOffset];
 }
 
 - (void)restorePreviousMapPage {
-    if (_pageOffsets.count == 0) return;
+    if (_pageOffsets.count == 0 || _isRestoringPage || _isLoadingMore) return;
+    _isRestoringPage = YES;
     NSNumber *firstOffset = _pageOffsets.firstObject;
-    if ([firstOffset integerValue] <= 0) return;
+    if ([firstOffset integerValue] <= 0) { _isRestoringPage = NO; return; }
     NSNumber *prevOffset = @([firstOffset integerValue] - 50);
     NSArray *cachedPage = _pageCache[prevOffset];
-    if (!cachedPage) return;
+    if (!cachedPage) { _isRestoringPage = NO; return; }
 
     NSIndexSet *indexes = [NSIndexSet indexSetWithIndexesInRange:NSMakeRange(0, cachedPage.count)];
     [self.maps insertObjects:cachedPage atIndexes:indexes];
     [_pageOffsets insertObject:prevOffset atIndex:0];
 
     CGFloat offsetY = self.tableView.contentOffset.y;
+    self.adjustingContentOffset = YES;
     [self.tableView reloadData];
     self.tableView.contentOffset = CGPointMake(0, offsetY + cachedPage.count * 64);
+    self.adjustingContentOffset = NO;
+    _isRestoringPage = NO;
 }
 
 #pragma mark - Scroll (pagination)
 
 - (void)scrollViewDidScroll:(UIScrollView *)scrollView {
-    if (scrollView != _tableView) return;
+    if (scrollView != _tableView || _adjustingContentOffset) return;
     CGFloat offsetY = scrollView.contentOffset.y;
     CGFloat contentHeight = scrollView.contentSize.height;
     CGFloat frameHeight = scrollView.frame.size.height;
 
-    if (offsetY > contentHeight - frameHeight - 150 && _hasMore && !_isLoadingMore && _maps.count > 0) {
+    if (offsetY > contentHeight - frameHeight - 150 && _hasMore && !_isLoadingMore && !_isRestoringPage && _maps.count > 0 && scrollView.isDragging) {
         [self loadMoreMaps];
     }
-    if (offsetY < 80 && !_isLoadingMore && _pageOffsets.count > 0) {
+    if (offsetY < 80 && !_isLoadingMore && !_isRestoringPage && _pageOffsets.count > 0 && scrollView.isDragging) {
         if ([_pageOffsets.firstObject integerValue] > 0) {
             [self restorePreviousMapPage];
         }
+    }
+}
+
+// Load one more page when a flick/drag releases near the bottom.
+- (void)scrollViewDidEndDragging:(UIScrollView *)scrollView willDecelerate:(BOOL)decelerate {
+    if (decelerate) return;
+    if (scrollView != _tableView || _adjustingContentOffset || _isLoadingMore || !_hasMore) return;
+    CGFloat offsetY = scrollView.contentOffset.y;
+    CGFloat contentHeight = scrollView.contentSize.height;
+    CGFloat frameHeight = scrollView.frame.size.height;
+    if (offsetY > contentHeight - frameHeight - 150 && _maps.count > 0) {
+        [self loadMoreMaps];
+    }
+}
+
+- (void)scrollViewDidEndDecelerating:(UIScrollView *)scrollView {
+    if (scrollView != self.tableView || _adjustingContentOffset || _isLoadingMore || !_hasMore) return;
+    CGFloat offsetY = scrollView.contentOffset.y;
+    CGFloat contentHeight = scrollView.contentSize.height;
+    CGFloat frameHeight = scrollView.frame.size.height;
+    if (offsetY > contentHeight - frameHeight - 150 && _maps.count > 0) {
+        [self loadMoreMaps];
     }
 }
 

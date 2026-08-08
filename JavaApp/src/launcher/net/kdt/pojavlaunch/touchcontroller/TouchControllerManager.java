@@ -75,6 +75,18 @@ public class TouchControllerManager {
             // Start the proxy client (starts message processing thread)
             proxyClient.run();
 
+            // Ensure the transport and message thread are torn down when the
+            // game quits; otherwise the JVM cannot exit and Minecraft's
+            // ClientShutdownWatchdog fires a "Client shutdown from post-main"
+            // crash report after 10 seconds.
+            Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+                try {
+                    shutdown();
+                } catch (Exception e) {
+                    System.err.println(TAG + ": shutdown hook error: " + e);
+                }
+            }, "TouchController-shutdown"));
+
             initialized = true;
             System.out.println(TAG + ": TouchController initialized, size=" + width + "x" + height);
 

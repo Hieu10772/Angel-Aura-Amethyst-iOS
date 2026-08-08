@@ -121,7 +121,9 @@ void CTCClipboard_nQuerySystemClipboard(JNIEnv *env, jclass clazz) {
     // Note: we cannot use main_queue here as it will cause deadlock
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
         JNIEnv *env;
-        (*runtimeJavaVMPtr)->AttachCurrentThread(runtimeJavaVMPtr, &env, NULL);
+        // Daemon attach: GCD worker threads live forever, so a non-daemon
+        // attach here would keep the JVM from exiting after the game stops.
+        (*runtimeJavaVMPtr)->AttachCurrentThreadAsDaemon(runtimeJavaVMPtr, &env, NULL);
         const char* mimeChars = "text/plain";
         (*env)->CallStaticVoidMethod(env, class_CTCClipboard, method_SystemClipboardDataReceived,
             UIKit_accessClipboard(env, CLIPBOARD_PASTE, NULL),
@@ -270,9 +272,6 @@ JNIEXPORT jlong JNICALL Java_org_lwjgl_glfw_GLFW_nglfwSet##NAME##Callback(JNIEnv
     GLFW_invoke_##NAME = (GLFW_invoke_##NAME##_func*) (uintptr_t) callbackptr; \
     if (showingWindow == 0 && window != 0) { \
         showingWindow = (long) window; \
-        NSLog(@"[InputDiag] callback registered: %s — showingWindow fallback set to %p", #NAME, (void*) showingWindow); \
-    } else { \
-        NSLog(@"[KeyboardDebug] callback registered: %s window=%p ptr=%p showingWindow=%p", #NAME, (void*) window, (void*) (uintptr_t) callbackptr, (void*) showingWindow); \
     } \
     return (jlong) (uintptr_t) *oldCallback; \
 }
@@ -302,7 +301,6 @@ void pojavPumpEvents(void* window) {
     static BOOL setInputReady = NO;
     if (window && showingWindow == 0) {
         showingWindow = (long) window;
-        NSLog(@"[InputDiag] pojavPumpEvents: showingWindow fallback set to %p", (void*) showingWindow);
     }
     if(!setInputReady) {
         setInputReady = YES;
@@ -320,15 +318,12 @@ void pojavPumpEvents(void* window) {
         GLFWInputEvent event = events[i];
         switch(event.type) {
             case EVENT_TYPE_CHAR:
-                NSLog(@"[KeyboardDebug] Queue: Processing EVENT_TYPE_CHAR for character %d", event.i1);
                 if(GLFW_invoke_Char) GLFW_invoke_Char(window, event.i1);
                 break;
             case EVENT_TYPE_CHAR_MODS:
-                NSLog(@"[KeyboardDebug] Queue: Processing EVENT_TYPE_CHAR_MODS for character %d", event.i1);
                 if(GLFW_invoke_CharMods) {
                     GLFW_invoke_CharMods(window, event.i1, event.i2);
                 } else if (GLFW_invoke_Char) {
-                    NSLog(@"[KeyboardDebug] Queue: Fallback to GLFW_invoke_Char for character %d", event.i1);
                     GLFW_invoke_Char(window, event.i1);
                 }
                 break;
@@ -881,7 +876,6 @@ static uint32_t aasdl_mapMods(int mods) {
 }
 
 BOOL CallbackBridge_nativeSendChar(jchar codepoint /* jint codepoint */) {
-    NSLog(@"[KeyboardDebug] Bridge: sendChar code=%d, isInputReady=%d, Char=%p, showingWindow=%p", codepoint, isInputReady, GLFW_invoke_Char, (void*) showingWindow);
     if (GLFW_invoke_Char && isInputReady) {
         if (isUseStackQueueCall) {
             sendData(EVENT_TYPE_CHAR, codepoint, 0, 0, 0);
@@ -898,29 +892,21 @@ BOOL CallbackBridge_nativeSendChar(jchar codepoint /* jint codepoint */) {
 }
 
 BOOL CallbackBridge_nativeSendCharMods(jchar codepoint, int mods) {
-    NSLog(@"[KeyboardDebug] Bridge: Got character code=%d, modifiers=%d, isInputReady=%d, CharMods=%p, Char=%p, showingWindow=%p, queue=%d", codepoint, mods, isInputReady, GLFW_invoke_CharMods, GLFW_invoke_Char, (void*) showingWindow, isUseStackQueueCall);
-
     if ((GLFW_invoke_CharMods || GLFW_invoke_Char) && isInputReady) {
         if (isUseStackQueueCall) {
-            NSLog(@"[KeyboardDebug] Bridge: Sending character %d to stack-queue (isUseStackQueueCall)", codepoint);
             sendData(EVENT_TYPE_CHAR_MODS, (unsigned int) codepoint, mods, 0, 0);
         } else {
             if (GLFW_invoke_CharMods) {
-                NSLog(@"[KeyboardDebug] Bridge: Direct call to GLFW_invoke_CharMods for character %d", codepoint);
                 GLFW_invoke_CharMods((void*) showingWindow, codepoint, mods);
             } else {
-                NSLog(@"[KeyboardDebug] Bridge: Fallback! Direct call to GLFW_invoke_Char for character %d", codepoint);
                 GLFW_invoke_Char((void*) showingWindow, (unsigned int) codepoint);
             }
         }
         return YES;
     } else if (aasdl_available()) {
-        NSLog(@"[KeyboardDebug] Bridge: Falling back to SDL text input for character %d", codepoint);
         aasdl_pushTextInput((uint32_t) codepoint);
         return YES;
     }
-    
-    NSLog(@"[KeyboardDebug] Bridge CRITICAL ERROR: Character %d DISCARDED! Reason: No handlers or game not ready.", codepoint);
     return NO;
 }
 /*

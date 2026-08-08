@@ -1,13 +1,7 @@
-# Fork from: [Catsruledogs](https://github.com/catsruledogs/Amethyst-iOS-25.git) 
-* It was created to fix some bugs that Catsruledogs hadn't yet addressed, then tested and added to Catsruledogs' main repository.
+Thanks to vibecodest and [Catsruledogs](https://github.com/catsruledogs/Amethyst-iOS-25.git), T1k-T1k for the source code!
 
-**All the new versions of Minecraft work as of right now, including the 26.3 snapshots. The Keyboard is fixed! Make sure to set your renderer to MobileGlues when you first launch the game! Vulkan does work, just first launch the game using MobileGlues and then change the Prefered Graphics API to Vulkan. There is currently a bug with Sodium and MobileGlues. If someone knows how to fix this, that would be great! There is a post about it in Issues.**
+```Thanks to L4d for helping me fix the bug on iOS 27 (but it didn't work :< I'm sorry)```
 
-This is a build of AngelAuraAmethyst iOS which has been customized to be able to launch Minecraft 26.x.x. This includes the snapshots. Do note that this is completely unofficial. Don't bother the Amethyst devs if something breaks. Instead, post an issue here and i'll look into it. Keyboard is now working thanks to @ and @DuyAnh662. @T1k-T1k also made compiling possible. Huge thanks to both of them. This build bundles a custom lwjgl version and Java 25. It also does not include slimmed versions. Builds are only published in Releases and not in Actions. Builds in Actions are never intended to be used until they become releases. Most older Minecraft versions that use Java 21 will launch with this by selecting Java 25 as the Java version. All versions that use Java 8 work without any special configuration. Versions that use Java 17 do not currently work. Instead, you can install normal Amethyst alongside this version because of different bundle identifiers.
-
-Compiling does work, and is supported, but is still not recommended. The build process now automatically uses the custom lwjgl.jar from the project root. The lwjgl.jar at the root is a modified version 3.3.3 that provides compatibility with LWJGL 3.4.1 API calls.
-
-Thanks to vibecodest and Catsruledogs, T1k-T1k for the source code!
 ## Third party components and their licenses
 - [Caciocavallo](https://github.com/PojavLauncherTeam/caciocavallo): [GNU GPLv2 License](https://github.com/PojavLauncherTeam/caciocavallo/blob/master/LICENSE).
 - [jsr305](https://code.google.com/p/jsr-305): [3-Clause BSD License](http://opensource.org/licenses/BSD-3-Clause).

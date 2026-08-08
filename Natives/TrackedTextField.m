@@ -17,8 +17,30 @@ extern bool isUseStackQueueCall;
 
 @implementation TrackedTextField
 
+// Never intercept touches: this field must not steal taps from the game view
+// (it is kept inside the visible area so the hardware-keyboard input session
+// stays attached). It is focused only programmatically (becomeFirstResponder).
+- (BOOL)pointInside:(CGPoint)point withEvent:(UIEvent *)event {
+    return NO;
+}
+
+- (BOOL)becomeFirstResponder {
+    // A stale skipNextTextInsertion (set by hardware keypresses while the
+    // field was NOT focused) must not eat the first keystroke of a new
+    // typing session (e.g. when chat opens and the game shows the keyboard).
+    self.skipNextTextInsertion = NO;
+    return [super becomeFirstResponder];
+}
+
+- (BOOL)resignFirstResponder {
+    return [super resignFirstResponder];
+}
+
+- (void)insertText:(NSString *)text {
+    [super insertText:text];
+}
+
 - (void)sendMultiBackspaces:(int)times {
-    // NSLog(@"[KeyboardDebug] sendMultiBackspaces called, times: %d", times);
     for (int i = 0; i < times; i++) {
         self.sendKey(GLFW_KEY_BACKSPACE, 0, 1, 0);
         self.sendKey(GLFW_KEY_BACKSPACE, 0, 0, 0);
@@ -26,22 +48,17 @@ extern bool isUseStackQueueCall;
 }
 
 - (void)paste:(id)sender {
-    // NSLog(@"[KeyboardDebug] Paste triggered. Text: '%@'", UIPasteboard.generalPasteboard.string);
     [super paste:sender];
     [self sendText:UIPasteboard.generalPasteboard.string];
 }
 
 - (void)sendText:(NSString *)text {
-    NSLog(@"[KeyboardDebug] sendText processing string: '%@' (length: %lu), isUseStackQueueCall=%d", text, (unsigned long)text.length, isUseStackQueueCall);
     for (int i = 0; i < text.length; i++) {
         unichar theChar = [text characterAtIndex:i];
-        NSLog(@"[KeyboardDebug] Sending character: '%C' (Unicode decimal: %d)", theChar, theChar);
-        
+
         if (self.sendCharMods != nil) {
-            NSLog(@"[KeyboardDebug] -> Routing to sendCharMods block (isUseStackQueueCall: %d)", isUseStackQueueCall);
             self.sendCharMods(theChar, 0);
         } else {
-            NSLog(@"[KeyboardDebug] -> Routing to sendChar block (sendCharMods present: NO)");
             self.sendChar(theChar);
         }
     }
@@ -88,7 +105,6 @@ extern bool isUseStackQueueCall;
 }
 
 - (void)deleteBackward {
-    NSLog(@"[KeyboardDebug] deleteBackward invoked (Backspace pressed)");
     if (self.text.length > 1) {
         [super deleteBackward];
     } else {
@@ -105,7 +121,6 @@ extern bool isUseStackQueueCall;
 }
 
 - (NSRange)insertFilteredText:(NSString *)text {
-    NSLog(@"[KeyboardDebug] insertFilteredText: '%@', skipNextTextInsertion=%d", text, self.skipNextTextInsertion);
     if (self.skipNextTextInsertion) {
         self.skipNextTextInsertion = NO;
         return [super insertFilteredText:text];

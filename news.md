@@ -1,3 +1,43 @@
+# AngelAuraAmethyst iOS — 1.1.3-beta.9
+```Cảm ơn L4d đã hỗ trợ mình trong việc sửa chữa vấn đề trên iOS 27(But not working :< I'm Sorry)```
+## 🇬🇧 English
+
+- Fixed the Distant Horizons mod not working on iOS 26.
+- Fixed the crash issue when reaching 1000MB RAM on all devices.
+- Reviewed and fixed the Super Resolution mod not working.
+
+## 🇻🇳 Tiếng Việt
+
+- Sửa lỗi Distant Horizons mod không hoạt động trên iOS 26.
+- Sửa lỗi crash khi đạt 1000MB RAM trên mọi thiết bị.
+- Xem và sửa mod Super resolution không hoạt động.
+
+---
+
+# AngelAuraAmethyst iOS — 1.1.3-beta.8
+
+```Cảm ơn L4d đã hỗ trợ mình trong việc sửa chữa vấn đề trên iOS 27(But not working :< I'm Sorry)```
+
+## 🇬🇧 English
+
+- Fixed crashes on iOS 26.
+- Fixed the issue of not being able to type Vietnamese when using an external keyboard.
+- Fixed crashes when playing Minecraft Vanilla.
+- Fixed the issue of automatic downloads when browsing mods, modpacks, etc.
+- Added and modified features to change the mouse cursor style.
+- Fixes crash issues when exiting the game using a code.
+
+## 🇻🇳 Tiếng Việt
+
+- Sửa lỗi crash trên iOS 26.
+- Sửa lỗi không gõ được tiếng Việt khi sử dụng bàn phím ngoài.
+- Sửa lỗi crash khi chơi Minecraft Vanilla. 
+- Sửa lỗi tự động load khi duyệt mod, modpacks,...
+- Thêm và sửa tính năng thay đổi hình dáng trỏ chuột. 
+- Sửa lỗi crash với mã khi thoát game.
+
+---
+
 # AngelAuraAmethyst iOS — 1.1.3-beta.7
 
 ## 🇬🇧 English

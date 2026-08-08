@@ -1,7 +1,4 @@
-// Universal JIT Script, last updated 2026-29-03 (YYYY-DD-MM)
-// Amethyst: synced with StikDebug 3.1.x universal.js + try/catch around
-// prepare_memory_region so an outdated debugger fails loudly instead of
-// producing a W^X SIGBUS crash in the JVM.
+// Universal JIT Script, last updated 2025-10-10
 /*
  // JIT "syscalls"
  __attribute__((noinline,optnone,naked))
@@ -52,7 +49,6 @@ function log_verbose(msg) {
 // To avoid having to re-parse these in each function, we save some registers here
 let tid, x0, x1, x16, pc;
 let detached = false;
-let continuesWithSignal = true;
 let pid = get_pid();
 let attachResponse = send_command(`vAttach;${pid.toString(16)}`);
 
@@ -88,16 +84,14 @@ while (!detached) {
     // check if this is a brk
     if ((instrU32 & 0xFFE0001F)>>>0 != 0xD4200000) {
         log(`Skipping: instruction was not a brk (was 0x${instrU32.toString(16)})`);
-        if (continuesWithSignal) {
-            let signum = /^T(?<sig>[a-z0-9;]{2})/.exec(brkResponse);
-            signum = signum ? signum.groups['sig'] : null;
-            if (!signum) {
-                log(`Failed to extract signal number: ${signum}`);
-                continue;
-            }
-            log(`Continuing with signal 0x${signum}`);
-            send_command(`vCont;S${signum}:${tid}`);
+        let signum = /^T(?<sig>[a-z0-9;]{2})/.exec(brkResponse);
+        signum = signum ? signum.groups['sig'] : null;
+        if (!signum) {
+            log(`Failed to extract signal number: ${signum}`);
+            continue;
         }
+        log(`Continuing with signal 0x${signum}`);
+        send_command(`vCont;S${signum}:${tid}`);
         continue;
     }
     
@@ -202,16 +196,7 @@ function JIT26PrepareRegion(brkResponse) {
         log(`Allocated JIT page at address: 0x${jitPageAddress.toString(16)}`);
     }
 
-    let prepareJITPageResponse;
-    try {
-        prepareJITPageResponse = prepare_memory_region(jitPageAddress, x1);
-    } catch (e) {
-        log(`ERROR: prepare_memory_region threw: ${e}`);
-        log(`ERROR: JIT execution grant FAILED. This debugger build is too old for iOS 26.4+/27.`);
-        log(`ERROR: Update StikDebug to 3.1.6 or newer and try again.`);
-        send_command(`P0=00000000;thread:${tid};`);
-        return;
-    }
+    let prepareJITPageResponse = prepare_memory_region(jitPageAddress, x1);
     log(`prepareJITPageResponse = ${prepareJITPageResponse}`);
 
     let putX0Response = send_command(`P0=${numberToLittleEndianHexString(jitPageAddress)};thread:${tid};`);
