@@ -21,6 +21,7 @@
 @property (nonatomic) NSMutableArray *pageOffsets;
 @property (nonatomic) BOOL hasMore;
 @property (nonatomic) BOOL isLoadingMore;
+@property (nonatomic) BOOL adjustingContentOffset;
 @property (nonatomic) NSString *currentQuery;
 @end
 
@@ -196,12 +197,34 @@
 #pragma mark - Scroll (pagination)
 
 - (void)scrollViewDidScroll:(UIScrollView *)scrollView {
-    if (scrollView != _tableView) return;
+    if (scrollView != _tableView || _adjustingContentOffset) return;
     CGFloat offsetY = scrollView.contentOffset.y;
     CGFloat contentHeight = scrollView.contentSize.height;
     CGFloat frameHeight = scrollView.frame.size.height;
 
-    if (offsetY > contentHeight - frameHeight - 150 && _hasMore && !_isLoadingMore && _packs.count > 0) {
+    if (offsetY > contentHeight - frameHeight - 150 && _hasMore && !_isLoadingMore && _packs.count > 0 && scrollView.isDragging) {
+        [self loadMorePacks];
+    }
+}
+
+// Load one more page when a flick/drag releases near the bottom.
+- (void)scrollViewDidEndDragging:(UIScrollView *)scrollView willDecelerate:(BOOL)decelerate {
+    if (decelerate) return;
+    if (scrollView != _tableView || _adjustingContentOffset || _isLoadingMore || !_hasMore) return;
+    CGFloat offsetY = scrollView.contentOffset.y;
+    CGFloat contentHeight = scrollView.contentSize.height;
+    CGFloat frameHeight = scrollView.frame.size.height;
+    if (offsetY > contentHeight - frameHeight - 150 && _packs.count > 0) {
+        [self loadMorePacks];
+    }
+}
+
+- (void)scrollViewDidEndDecelerating:(UIScrollView *)scrollView {
+    if (scrollView != _tableView || _adjustingContentOffset || _isLoadingMore || !_hasMore) return;
+    CGFloat offsetY = scrollView.contentOffset.y;
+    CGFloat contentHeight = scrollView.contentSize.height;
+    CGFloat frameHeight = scrollView.frame.size.height;
+    if (offsetY > contentHeight - frameHeight - 150 && _packs.count > 0) {
         [self loadMorePacks];
     }
 }

@@ -173,9 +173,12 @@ NSMutableArray<NSDictionary *> *localVersionList, *remoteVersionList;
         return;
     }
     BOOL hasLoaderJvmArgs = NO;
-    for (NSString *arg in json[@"arguments"][@"jvm"]) {
-        // "jvm" entries can be rule-based dicts (e.g. vanilla 1.13+), not just strings
-        if (![arg isKindOfClass:NSString.class]) continue;
+    for (id arg in json[@"arguments"][@"jvm"]) {
+        // MC 26.x uses rule-based JVM args as NSDictionary entries
+        // ({"rules": [...], "value": ...}) in addition to plain strings.
+        if (![arg isKindOfClass:NSString.class]) {
+            continue;
+        }
         if ([arg containsString:@"bootstraplauncher"] ||
             [arg containsString:@"${library_directory}"] ||
             [arg containsString:@"${version_name}"]) {
@@ -193,8 +196,10 @@ NSMutableArray<NSDictionary *> *localVersionList, *remoteVersionList;
         @"${version_name}": json[@"id"]
     };
     int argsToSkip = 0;
-    for (NSString *arg in json[@"arguments"][@"jvm"]) {
-        if (![arg isKindOfClass:NSString.class]) continue;
+    for (id arg in json[@"arguments"][@"jvm"]) {
+        if (![arg isKindOfClass:NSString.class]) {
+            continue;
+        }
         if (argsToSkip == 0) {
             argsToSkip = [self numberOfArgsToSkipForArg:arg];
         }

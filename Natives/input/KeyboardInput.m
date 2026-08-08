@@ -88,7 +88,7 @@ int keycodeTable[UIKeyboardHIDUsageKeyboardRightGUI+1];
     }
 }
 
-+ (BOOL)sendKeyEvent:(UIKey *)key down:(BOOL)isDown {
++ (BOOL)sendKeyEvent:(UIKey *)key down:(BOOL)isDown sendChars:(BOOL)sendChars {
     char modifiers = 0;
 
     // convert UIKey's modifiers to GLFW
@@ -113,8 +113,14 @@ int keycodeTable[UIKeyboardHIDUsageKeyboardRightGUI+1];
         NSLog(@"KeyboardInput: Unhandled key %lu", (unsigned long)key.keyCode);
     }
 
-    // Send characters (only via charMods; it has fallback to char callback)
-    if (isDown && key.characters.length < 11) {
+    // Send characters (only via charMods; it has fallback to char callback).
+    // When the tracked text field is first responder, characters are skipped
+    // here: iOS delivers them through the text input path (insertText /
+    // marked text) instead, which carries the composed text (e.g. Telex/VNI
+    // Vietnamese). Sending raw UIKey characters would bypass composition and
+    // the game would see the uncomposed keystrokes ("Chaof" instead of
+    // "Chào"). sendChars is YES only when no text field is focused.
+    if (sendChars && isDown && key.characters.length < 11) {
         for (int i = 0; i < key.characters.length; i++) {
             int keychar = [key.characters characterAtIndex:i];
             CallbackBridge_nativeSendCharMods(keychar, modifiers);

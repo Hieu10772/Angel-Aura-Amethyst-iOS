@@ -11,11 +11,11 @@
 #import "input/ControllerInput.h"
 #import "input/GyroInput.h"
 #import "input/KeyboardInput.h"
+#import "input/TelexInput.h"
 
 #import "JavaLauncher.h"
 #import "LauncherPreferences.h"
 #import "MinecraftResourceUtils.h"
-#import "MousePointerFactory.h"
 #import "PLProfiles.h"
 #import "SurfaceViewController.h"
 #import "TrackedTextField.h"
@@ -23,18 +23,29 @@
 #import "ios_uikit_bridge.h"
 
 #import "touchcontroller_jni_bridge.h"
+#import "CursorManager.h"
 
 #include "glfw_keycodes.h"
 #include "utils.h"
 
 #include <dlfcn.h>
+#include <stdatomic.h>
+
+// Latched (in pressesBegan:) the first time any physical key is seen. Some
+// Bluetooth keyboards are not exposed via GameController, so this is the
+// most reliable "hardware keyboard attached" signal for focus management.
+static atomic_bool hardwareKeyboardSeen = false;
+
+// Tracks grab transitions so the Telex composition engine is reset whenever
+// the game switches between gameplay and a GUI screen.
+static BOOL lastGrabStateInited = NO;
+static BOOL lastGrabState = NO;
 
 int memorystatus_control(uint32_t command, int32_t pid, uint32_t flags, void *buffer, size_t buffersize);
 #define MEMORYSTATUS_CMD_SET_JETSAM_TASK_LIMIT        6
 
 static int currentHotbarSlot = -1;
 static GameSurfaceView* pojavWindow;
-static CGPoint virtualMouseHotspot = {0, 0};
 
 @interface SurfaceViewController ()<UITextFieldDelegate, UIGestureRecognizerDelegate> {
     // TouchController integration
@@ -212,19 +223,22 @@ static CGPoint virtualMouseHotspot = {0, 0};
 
     // Virtual mouse
     virtualMouseEnabled = getPrefBool(@"control.virtmouse_enable");
-    id pointerStyleObj = getPrefObject(@"control.mouse_pointer_style");
-    NSString *pointerStyle = [pointerStyleObj isKindOfClass:[NSString class]] ? pointerStyleObj : @"default";
     virtualMouseFrame = CGRectMake(self.view.frame.size.width / 2, self.view.frame.size.height / 2, 18, 27);
     self.mousePointerView = [[UIImageView alloc] initWithFrame:virtualMouseFrame];
     self.mousePointerView.autoresizingMask = UIViewAutoresizingFlexibleLeftMargin | UIViewAutoresizingFlexibleTopMargin | UIViewAutoresizingFlexibleRightMargin |UIViewAutoresizingFlexibleBottomMargin;
     self.mousePointerView.hidden = !virtualMouseEnabled;
-    self.mousePointerView.contentMode = UIViewContentModeScaleAspectFit;
-    self.mousePointerView.image = [MousePointerFactory imageForStyle:pointerStyle];
-    virtualMouseHotspot = [MousePointerFactory hotspotForStyle:pointerStyle];
+    self.mousePointerView.image = [CursorManager imageForCursor:[CursorManager currentCursorName]];
     self.mousePointerView.userInteractionEnabled = NO;
     [self.touchView addSubview:self.mousePointerView];
+    self.mousePointerView.frame = [CursorManager displayFrameForMouseFrame:virtualMouseFrame];
 
-    self.inputTextField = [[TrackedTextField alloc] initWithFrame:CGRectMake(0, -32.0, self.view.frame.size.width, 30.0)];
+    // Keep the tracked field inside the visible bounds: iOS attaches the
+    // hardware-keyboard text input session (UIFieldEditor) only when the first
+    // responder is within the key window's visible area. Alpha is kept just
+    // above zero so the field stays invisible but technically "visible" to
+    // UIKit (alpha 0 or hidden views can drop the input session).
+    self.inputTextField = [[TrackedTextField alloc] initWithFrame:CGRectMake(0, 0, self.view.frame.size.width, 30.0)];
+    self.inputTextField.alpha = 0.02f;
     self.inputTextField.backgroundColor = UIColor.secondarySystemBackgroundColor;
     self.inputTextField.delegate = self;
     self.inputTextField.font = [UIFont fontWithName:@"Menlo-Regular" size:20];
@@ -424,14 +438,9 @@ static CGPoint virtualMouseHotspot = {0, 0};
 
     // Update virtual mouse scale
     CGFloat mouseScale = getPrefFloat(@"control.mouse_scale") / 100.0;
-    id pointerStyleObj = getPrefObject(@"control.mouse_pointer_style");
-    NSString *pointerStyle = [pointerStyleObj isKindOfClass:[NSString class]] ? pointerStyleObj : @"default";
-    self.mousePointerView.image = [MousePointerFactory imageForStyle:pointerStyle];
-    virtualMouseHotspot = [MousePointerFactory hotspotForStyle:pointerStyle];
-    virtualMouseFrame = CGRectMake(self.view.frame.size.width / 2 - 18.0 * mouseScale * virtualMouseHotspot.x,
-                                   self.view.frame.size.height / 2 - 27.0 * mouseScale * virtualMouseHotspot.y,
-                                   18.0 * mouseScale, 27.0 * mouseScale);
-    self.mousePointerView.frame = virtualMouseFrame;
+    virtualMouseFrame = CGRectMake(self.view.frame.size.width / 2, self.view.frame.size.height / 2, 18.0 * mouseScale, 27 * mouseScale);
+    self.mousePointerView.image = [CursorManager imageForCursor:[CursorManager currentCursorName]];
+    self.mousePointerView.frame = [CursorManager displayFrameForMouseFrame:virtualMouseFrame];
 
     self.shouldHideControlsFromRecording = getPrefFloat(@"control.recording_hide");
     [self.ctrlView hideViewFromCapture:self.shouldHideControlsFromRecording];
@@ -510,14 +519,31 @@ static CGPoint virtualMouseHotspot = {0, 0};
 }
 
 - (void)updateGrabState {
+    // A grab transition means the game's screen changed (chat/menu opened or
+    // closed); the game-side text field content no longer matches the Telex
+    // engine mirror, so forget the composition state.
+    BOOL grabbingNow = (isGrabbing == JNI_TRUE);
+    if (!lastGrabStateInited || grabbingNow != lastGrabState) {
+        lastGrabStateInited = YES;
+        lastGrabState = grabbingNow;
+        [TelexInput reset];
+        // Returning to gameplay: dismiss the on-screen keyboard if it was up
+        // (chat/menu closed). The game-side mod will resend a keyboard-show
+        // request if it is still needed.
+        if (grabbingNow && self.inputTextField.isFirstResponder) {
+            [self.inputTextField resignFirstResponder];
+        }
+    }
+
     // Update cursor position
     if (isGrabbing == JNI_TRUE) {
         CGFloat screenScale = self.surfaceView.layer.contentsScale;
         CallbackBridge_nativeSendCursorPos(ACTION_DOWN, lastVirtualMousePoint.x * screenScale, lastVirtualMousePoint.y * screenScale);
-        virtualMouseFrame.origin.x = self.view.frame.size.width / 2 - virtualMouseFrame.size.width * virtualMouseHotspot.x;
-        virtualMouseFrame.origin.y = self.view.frame.size.height / 2 - virtualMouseFrame.size.height * virtualMouseHotspot.y;
-        self.mousePointerView.frame = virtualMouseFrame;
+        virtualMouseFrame.origin.x = self.view.frame.size.width / 2;
+        virtualMouseFrame.origin.y = self.view.frame.size.height / 2;
+        self.mousePointerView.frame = [CursorManager displayFrameForMouseFrame:virtualMouseFrame];
     }
+
     self.scrollPanGesture.enabled = !isGrabbing;
     self.mousePointerView.hidden = isGrabbing || !virtualMouseEnabled;
     [self setNeedsUpdateOfPrefersPointerLocked];
@@ -611,7 +637,7 @@ static CGPoint virtualMouseHotspot = {0, 0};
         CGRect frame = self.view.frame;
         frame.size = size;
         self.touchView.frame = frame;
-        self.inputTextField.frame = CGRectMake(0, -32.0, size.width, 30.0);
+        self.inputTextField.frame = CGRectMake(0, 0, size.width, 30.0);
         [self viewWillTransitionToSize_Navigation:frame];
 
         // Update custom controls button position
@@ -622,7 +648,7 @@ static CGPoint virtualMouseHotspot = {0, 0};
         [self updateSavedResolution];
         [GyroInput updateOrientation];
     } completion:^(id<UIViewControllerTransitionCoordinatorContext>  _Nonnull context) {
-        virtualMouseFrame = self.mousePointerView.frame;
+        virtualMouseFrame = [CursorManager mouseFrameForDisplayFrame:self.mousePointerView.frame];
     }];
     [super viewWillTransitionToSize:size withTransitionCoordinator:coordinator];
 }
@@ -647,13 +673,11 @@ static CGPoint virtualMouseHotspot = {0, 0};
                 virtualMouseFrame.origin.x += location.x * self.mouseSpeed;
                 virtualMouseFrame.origin.y += location.y * self.mouseSpeed;
             }
-            CGFloat cursorX = clamp(virtualMouseFrame.origin.x, 0, self.surfaceView.frame.size.width);
-            CGFloat cursorY = clamp(virtualMouseFrame.origin.y, 0, self.surfaceView.frame.size.height);
-            virtualMouseFrame.origin.x = cursorX - virtualMouseFrame.size.width * virtualMouseHotspot.x;
-            virtualMouseFrame.origin.y = cursorY - virtualMouseFrame.size.height * virtualMouseHotspot.y;
+            virtualMouseFrame.origin.x = clamp(virtualMouseFrame.origin.x, 0, self.surfaceView.frame.size.width);
+            virtualMouseFrame.origin.y = clamp(virtualMouseFrame.origin.y, 0, self.surfaceView.frame.size.height);
             lastVirtualMousePoint = location;
-            self.mousePointerView.frame = virtualMouseFrame;
-            CallbackBridge_nativeSendCursorPos(event, cursorX * screenScale, cursorY * screenScale);
+            self.mousePointerView.frame = [CursorManager displayFrameForMouseFrame:virtualMouseFrame];
+            CallbackBridge_nativeSendCursorPos(event, virtualMouseFrame.origin.x * screenScale, virtualMouseFrame.origin.y * screenScale);
             return;
         }
         lastVirtualMousePoint = location;
@@ -675,7 +699,6 @@ static CGPoint virtualMouseHotspot = {0, 0};
     if (gestureRecognizer.state == UIGestureRecognizerStateBegan) {
         if (self.inputTextField.isFirstResponder) {
             [self.inputTextField resignFirstResponder];
-            self.inputTextField.alpha = 1.0f;
         } else {
             [self.inputTextField becomeFirstResponder];
             // Insert an undeletable space
@@ -779,12 +802,33 @@ static CGPoint virtualMouseHotspot = {0, 0};
 
 - (void)pressesBegan:(NSSet<UIPress *> *)presses withEvent:(UIPressesEvent *)event {
     BOOL handled = NO;
+    // Hardware-keyboard text is composed in-app by the Telex engine and
+    // streamed straight to the game; iOS never delivers external-keyboard
+    // text into the tracked field (see TrackedTextField instrumentation).
+    // Resign any on-screen keyboard session the game started so physical keys
+    // don't fall into the dead UIKit text path and the OSK hides.
+    if (self.inputTextField.isFirstResponder) {
+        [self.inputTextField resignFirstResponder];
+        self.inputTextField.text = @" ";
+    }
     for (UIPress *press in presses) {
-        if (press.key != nil && [KeyboardInput sendKeyEvent:press.key down:YES]) {
-            handled = YES;
+        if (press.key != nil) {
+            // A physical key press proves a hardware keyboard is attached.
+            if (!hardwareKeyboardSeen) {
+                hardwareKeyboardSeen = true;
+            }
+            // When a GUI screen is open (mouse grab released) text-producing
+            // keys go through the Telex engine, which composes Vietnamese and
+            // sends chars/backspaces to the game. During gameplay only
+            // keycodes are sent (movement, menus), as before.
+            if (isInputReady && isGrabbing != JNI_TRUE) {
+                [TelexInput handleKey:press.key];
+            }
+            if ([KeyboardInput sendKeyEvent:press.key down:YES sendChars:NO]) {
+                handled = YES;
+            }
         }
     }
-    self.inputTextField.skipNextTextInsertion = handled;
     if (!handled) {
         [super pressesBegan:presses withEvent:event];
     }
@@ -793,7 +837,7 @@ static CGPoint virtualMouseHotspot = {0, 0};
 - (void)pressesEnded:(NSSet<UIPress *> *)presses withEvent:(UIPressesEvent *)event {
     BOOL handled = NO;
     for (UIPress *press in presses) {
-        if (press.key != nil && [KeyboardInput sendKeyEvent:press.key down:NO]) {
+        if (press.key != nil && [KeyboardInput sendKeyEvent:press.key down:NO sendChars:NO]) {
             handled = YES;
         }
     }
@@ -971,6 +1015,13 @@ static CGPoint virtualMouseHotspot = {0, 0};
 
 #pragma mark - Input view stuff
 
+// An on-screen keyboard session takes ownership of the game field's text;
+// the Telex engine mirror must not survive into the next hardware-keyboard
+// session.
+- (void)textFieldDidBeginEditing:(UITextField *)textField {
+    [TelexInput reset];
+}
+
 -(BOOL)textFieldShouldReturn:(UITextField *)textField {
     CallbackBridge_nativeSendKey(GLFW_KEY_ENTER, 0, 1, 0);
     CallbackBridge_nativeSendKey(GLFW_KEY_ENTER, 0, 0, 0);
@@ -990,7 +1041,6 @@ static CGPoint virtualMouseHotspot = {0, 0};
                     if (held == 0) {
                         if (self.inputTextField.isFirstResponder) {
                             [self.inputTextField resignFirstResponder];
-                            self.inputTextField.alpha = 1.0f;
                         } else {
                             [self.inputTextField becomeFirstResponder];
                             // Insert an undeletable space

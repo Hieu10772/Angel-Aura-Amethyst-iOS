@@ -233,6 +233,7 @@
 @property (nonatomic) NSInteger lastContentOffsetY;
 @property (nonatomic) NSInteger pageSize;
 @property (nonatomic) BOOL isRestoringPage;
+@property (nonatomic) BOOL adjustingContentOffset;
 @end
 
 @implementation ModListViewController
@@ -542,26 +543,32 @@
     CGFloat adjustedOffset = offsetY - removeCount * estimatedCellHeight;
     if (adjustedOffset < 0) adjustedOffset = 0;
 
+    // Only drop the *offsets* that left the screen; the cached pages are kept
+    // so scrolling back up can restore the trimmed rows (restorePreviousPage
+    // inserts from this cache).
     NSInteger remainingRemove = removeCount;
     while (self.pageOffsets.count > 0) {
         NSNumber *firstOffset = self.pageOffsets.firstObject;
         NSArray *page = self.pageCache[firstOffset];
         if (!page) {
-            [self.pageCache removeObjectForKey:firstOffset];
             [self.pageOffsets removeObjectAtIndex:0];
             continue;
         }
         if (page.count <= remainingRemove) {
             remainingRemove -= page.count;
-            [self.pageCache removeObjectForKey:firstOffset];
             [self.pageOffsets removeObjectAtIndex:0];
         } else {
             break;
         }
     }
 
+    // The programmatic offset change below must not re-arm the auto-load /
+    // restore triggers in scrollViewDidScroll (otherwise every page load
+    // chains into the next one while the user holds the scroll at the end).
+    self.adjustingContentOffset = YES;
     self.tableView.contentOffset = CGPointMake(0, adjustedOffset);
     [self.tableView reloadData];
+    self.adjustingContentOffset = NO;
 }
 
 - (void)loadMoreMods {
@@ -587,30 +594,58 @@
     [self.pageOffsets insertObject:prevOffset atIndex:0];
 
     CGFloat offsetY = self.tableView.contentOffset.y;
+    self.adjustingContentOffset = YES;
     [self.tableView reloadData];
     CGFloat estimatedCellHeight = 80;
     self.tableView.contentOffset = CGPointMake(0, offsetY + cachedPage.count * estimatedCellHeight);
+    self.adjustingContentOffset = NO;
     _isRestoringPage = NO;
 }
 
 #pragma mark - Scroll (pagination)
 
 - (void)scrollViewDidScroll:(UIScrollView *)scrollView {
-    if (scrollView != _tableView) return;
+    if (scrollView != _tableView || _adjustingContentOffset) return;
 
     CGFloat offsetY = scrollView.contentOffset.y;
     CGFloat contentHeight = scrollView.contentSize.height;
     CGFloat frameHeight = scrollView.frame.size.height;
 
-    if (offsetY > contentHeight - frameHeight - 150 && _hasMore && !_isLoadingMore && _mods.count > 0) {
+    // Only auto-load while the user is actually dragging; never while the
+    // view is decelerating into a clamped position or right after our own
+    // offset adjustments (see adjustingContentOffset).
+    if (offsetY > contentHeight - frameHeight - 150 && _hasMore && !_isLoadingMore && _mods.count > 0 && scrollView.isDragging) {
         [self loadMoreMods];
     }
 
-    if (offsetY < 80 && !_isLoadingMore && !_isRestoringPage && _pageOffsets.count > 0) {
+    if (offsetY < 80 && !_isLoadingMore && !_isRestoringPage && _pageOffsets.count > 0 && scrollView.isDragging) {
         NSNumber *firstOffset = _pageOffsets.firstObject;
         if ([firstOffset integerValue] > 0) {
             [self restorePreviousPage];
         }
+    }
+}
+
+// Load one more page when a flick/drag releases near the bottom, so the
+// auto-load works after the finger lifts without chaining while holding.
+- (void)scrollViewDidEndDragging:(UIScrollView *)scrollView willDecelerate:(BOOL)decelerate {
+    if (decelerate) return;
+    if (scrollView != _tableView || _adjustingContentOffset || _isLoadingMore || !_hasMore) return;
+    CGFloat offsetY = scrollView.contentOffset.y;
+    CGFloat contentHeight = scrollView.contentSize.height;
+    CGFloat frameHeight = scrollView.frame.size.height;
+    if (offsetY > contentHeight - frameHeight - 150 && _mods.count > 0) {
+        [self loadMoreMods];
+    }
+}
+
+- (void)scrollViewDidEndDecelerating:(UIScrollView *)scrollView {
+    if (scrollView != _tableView || _adjustingContentOffset || _isLoadingMore || !_hasMore) return;
+    CGFloat offsetY = scrollView.contentOffset.y;
+    CGFloat contentHeight = scrollView.contentSize.height;
+    CGFloat frameHeight = scrollView.frame.size.height;
+    if (offsetY > contentHeight - frameHeight - 150 && _mods.count > 0) {
+        [self loadMoreMods];
     }
 }
 

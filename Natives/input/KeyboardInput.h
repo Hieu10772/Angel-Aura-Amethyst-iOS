@@ -3,6 +3,6 @@
 @interface KeyboardInput : NSObject
 
 + (void)initKeycodeTable;
-+ (BOOL)sendKeyEvent:(UIKey *)key down:(BOOL)isDown;
++ (BOOL)sendKeyEvent:(UIKey *)key down:(BOOL)isDown sendChars:(BOOL)sendChars;
 
 @end

@@ -66,6 +66,10 @@ public class LauncherProxyClient {
         if (running.compareAndSet(false, true)) {
             messageClient.run();
             messageThread = new Thread(this::messageLoop, "TouchController-Proxy");
+            // Daemon: the message loop may block forever (e.g. transport receive),
+            // which would prevent the JVM from exiting when the game quits and
+            // trigger Minecraft's ClientShutdownWatchdog crash report.
+            messageThread.setDaemon(true);
             messageThread.start();
 
             // Send initial capabilities after connection
