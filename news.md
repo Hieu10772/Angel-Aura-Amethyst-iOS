@@ -24,7 +24,7 @@
 # AngelAuraAmethyst iOS — 1.1.3
 
 ```Cảm ơn L4d đã hỗ trợ mình trong việc sửa chữa vấn đề trên iOS 27(But not working :< I'm Sorry)```
-
+```Thanks for Development247```
 ## 🇬🇧 English
 
 - Fixed the Distant Horizons mod not working on iOS 26.

@@ -409,10 +409,24 @@ int launchJVMWithArgs(NSString *username, id launchTarget, int width, int height
     if (getPrefBool(@"java.auto_ram")) {
         CGFloat autoRatio = getEntitlementValue(@"com.apple.private.memorystatus") ? 0.4 : 0.25;
         allocmem = roundf((NSProcessInfo.processInfo.physicalMemory / 1048576) * autoRatio);
+        // Auto sizing is derived from physical RAM, not from the process's
+        // Jetsam allowance, so it can over-allocate on sideloaded installs
+        // (no memorystatus entitlement) where the kill limit is fixed and
+        // low. Keep the allowance cap here to prevent launch-time Jetsam kills.
+        allocmem = capAllocationToJetsamAllowance(allocmem);
     } else {
+        // Manual allocation: honor the user's setting as-is. The JVM commits
+        // heap lazily (ParallelGC), so -Xmx is a ceiling, not a preallocation.
+        // Just warn when the requested heap exceeds the actual Jetsam kill
+        // allowance so the user knows a memory-heavy session may be killed.
         allocmem = getPrefInt(@"java.allocated_memory");
+        if (!getEntitlementValue(@"com.apple.private.memorystatus")) {
+            size_t availableMem = availableMemoryMB();
+            if (availableMem > 0 && (size_t)allocmem > availableMem) {
+                NSLog(@"[JavaLauncher] Warning: requested %d MB heap exceeds the Jetsam kill allowance (~%zu MB); the game may be killed when its memory usage approaches the limit", allocmem, availableMem);
+            }
+        }
     }
-    allocmem = capAllocationToJetsamAllowance(allocmem);
     NSLog(@"[JavaLauncher] Max RAM allocation is set to %d MB", allocmem);
     if (!validateVirtualMemorySpace(allocmem)) {
         UIKit_returnToSplitView();
