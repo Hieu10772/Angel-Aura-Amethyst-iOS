@@ -892,13 +892,28 @@ createLibraryInfo(libItem);
     }
 
     /**
-     * Detect if Distant Horizons mod is in the library list.
+     * Detect if Distant Horizons mod is installed: either in the version
+     * library list (Forge-style) or dropped manually into the instance's
+     * mods folder (Fabric/Quilt).
      */
-    public static boolean hasDistantHorizonsMod(DependentLibrary[] libraries) {
-        if (libraries == null) return false;
-        for (DependentLibrary lib : libraries) {
-            if (lib.name != null && lib.name.toLowerCase().contains(DH_MOD_ID)) {
-                return true;
+    public static boolean hasDistantHorizonsMod(JMinecraftVersionList.Version versionInfo) {
+        if (versionInfo != null && versionInfo.libraries != null) {
+            for (DependentLibrary lib : versionInfo.libraries) {
+                if (lib.name != null && lib.name.toLowerCase().contains(DH_MOD_ID)) {
+                    return true;
+                }
+            }
+        }
+        String[] modDirs = {DIR_GAME_PROFILE + "/mods", DIR_GAME_PROFILE + "/.minecraft/mods"};
+        for (String dirPath : modDirs) {
+            File dir = new File(dirPath);
+            if (!dir.isDirectory()) continue;
+            File[] jars = dir.listFiles((d, name) -> name.endsWith(".jar"));
+            if (jars == null) continue;
+            for (File jar : jars) {
+                if (jar.getName().toLowerCase().contains("distant")) {
+                    return true;
+                }
             }
         }
         return false;
@@ -909,7 +924,8 @@ createLibraryInfo(libItem);
      * Returns the directory containing the signed library, or null if failed.
      */
     public static String prepareDistantHorizonsNativeLib(JMinecraftVersionList.Version versionInfo) {
-        if (!hasDistantHorizonsMod(versionInfo.libraries)) {
+        if (!hasDistantHorizonsMod(versionInfo)) {
+            System.err.println("[DH Fix] Distant Horizons mod not found in version libraries or mods folder");
             return null;
         }
 
@@ -1012,45 +1028,68 @@ createLibraryInfo(libItem);
     }
 
     private static ZipEntry findLibEntry(JarFile jar, String keyword) {
+        java.util.jar.JarEntry fallback = null;
         for (java.util.Enumeration<java.util.jar.JarEntry> e = jar.entries(); e.hasMoreElements(); ) {
             java.util.jar.JarEntry entry = e.nextElement();
             String name = entry.getName().toLowerCase();
             if (name.contains(keyword.toLowerCase()) && name.endsWith(".dylib")) {
-                return entry;
+                if (name.contains("aarch64") || name.contains("arm64")) {
+                    return entry;
+                }
+                if (fallback == null) fallback = entry;
             }
         }
-        return null;
+        return fallback;
     }
 
     private static boolean signLibrary(File libFile) {
+        // iOS has no /usr/bin/codesign. The app bundles an arm64 iOS ldid
+        // at <bundle>/ldid (signed ad-hoc at package time), which we fall
+        // back to. On TXM devices (A12+) an UNSIGNED dylib will not dlopen
+        // ("code signature invalid") even inside the app container, so
+        // signing is mandatory, not optional.
+        String ldidPath = null;
+        if (DIR_BUNDLE != null) {
+            File bundledLdid = new File(DIR_BUNDLE, "ldid");
+            if (bundledLdid.isFile()) {
+                ldidPath = bundledLdid.getAbsolutePath();
+            }
+        }
+
+        if (ldidPath == null) {
+            if (runSignTool(new String[]{"codesign", "--force", "--sign", "-", libFile.getAbsolutePath()},
+                    "codesign", libFile.getName())) {
+                return true;
+            }
+            System.err.println("[DH Fix] codesign unavailable and no bundled ldid at " + DIR_BUNDLE + "/ldid");
+            return false;
+        }
+        return runSignTool(new String[]{ldidPath, "-S", libFile.getAbsolutePath()}, "ldid", libFile.getName());
+    }
+
+    private static boolean runSignTool(String[] command, String toolName, String libName) {
         try {
-            // Use codesign with ad-hoc signature (no certificate needed)
-            ProcessBuilder pb = new ProcessBuilder("codesign", "--force", "--sign", "-", libFile.getAbsolutePath());
+            ProcessBuilder pb = new ProcessBuilder(command);
             pb.redirectErrorStream(true);
             Process process = pb.start();
             int exitCode = process.waitFor();
             if (exitCode == 0) {
-                System.out.println("[DH Fix] Successfully signed library: " + libFile.getName());
+                System.out.println("[DH Fix] Successfully signed library (" + toolName + "): " + libName);
                 return true;
-            } else {
-                StringBuilder output = new StringBuilder();
-                try (InputStream is = process.getInputStream()) {
-                    byte[] buffer = new byte[1024];
-                    int len;
-                    while ((len = is.read(buffer)) > 0) {
-                        output.append(new String(buffer, 0, len));
-                    }
-                }
-                System.err.println("[DH Fix] codesign failed (exit " + exitCode + "): " + output);
-                return false;
             }
+            StringBuilder output = new StringBuilder();
+            try (InputStream is = process.getInputStream()) {
+                byte[] buffer = new byte[1024];
+                int len;
+                while ((len = is.read(buffer)) > 0) {
+                    output.append(new String(buffer, 0, len));
+                }
+            }
+            System.err.println("[DH Fix] " + toolName + " failed (exit " + exitCode + "): " + output);
+            return false;
         } catch (Exception e) {
-            // iOS has no /usr/bin/codesign. The app carries the
-            // com.apple.security.cs.disable-library-validation entitlement,
-            // so an unsigned/ad-hoc dylib in the app container loads fine
-            // anyway; do not fail the launch over this.
-            System.err.println("[DH Fix] codesign unavailable (" + e.getMessage() + "), skipping (disable-library-validation covers it)");
-            return true;
+            System.err.println("[DH Fix] " + toolName + " unavailable (" + e.getMessage() + ")");
+            return false;
         }
     }
 }

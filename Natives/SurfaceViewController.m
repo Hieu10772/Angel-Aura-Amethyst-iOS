@@ -23,6 +23,7 @@
 #import "ios_uikit_bridge.h"
 
 #import "touchcontroller_jni_bridge.h"
+#import "touchcontroller_launcher.h"
 #import "CursorManager.h"
 
 #include "glfw_keycodes.h"
@@ -790,13 +791,22 @@ static GameSurfaceView* pojavWindow;
                 float deltaY = locationInView.y - prevLocationInView.y;
                 locationInView.x -= prevLocationInView.x;
                 locationInView.y -= prevLocationInView.y;
-                
-                // TouchController: Send view movement for camera rotation
-                CGFloat gameWidth = self.surfaceView.frame.size.width;
-                CGFloat gameHeight = self.surfaceView.frame.size.height;
-                float normDeltaX = deltaX / gameWidth;
-                float normDeltaY = deltaY / gameHeight;
-                touchcontroller_onViewMove(normDeltaY, normDeltaX); // pitch = Y, yaw = X
+
+                // TouchController: once the mod's transport is live it owns
+                // camera rotation (its View widget accumulates raw pointer
+                // deltas itself). Injecting raw MoveView for every primary
+                // drag here would also rotate the camera while dragging the
+                // mod's joystick/buttons, because the launcher cannot know
+                // the mod's layout. Only fall back to this channel during the
+                // boot window before the mod has drained its first message.
+                if (touchcontroller_launcher_mod_active() == 0) {
+                    // TouchController: Send view movement for camera rotation
+                    CGFloat gameWidth = self.surfaceView.frame.size.width;
+                    CGFloat gameHeight = self.surfaceView.frame.size.height;
+                    float normDeltaX = deltaX / gameWidth;
+                    float normDeltaY = deltaY / gameHeight;
+                    touchcontroller_onViewMove(normDeltaY, normDeltaX); // pitch = Y, yaw = X
+                }
             }
             [self sendTouchPoint:locationInView withEvent:event];
         }

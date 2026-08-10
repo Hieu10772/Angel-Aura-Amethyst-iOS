@@ -292,6 +292,20 @@ int touchcontroller_launcher_game_drained_past(size_t marker) {
     return drained;
 }
 
+// Non-zero once the game-side transport has drained at least one message from
+// the launcher_to_game queue. That proves the mod's Transport.receive loop is
+// live, so the mod owns pointer/view handling and the launcher must stop
+// injecting raw MoveView messages (which cannot know the mod's layout and
+// would rotate the camera while dragging the mod's joystick/buttons).
+int touchcontroller_launcher_mod_active(void) {
+    queue_t* queue = ensure_queue();
+    if (queue == NULL) return 0;
+    pthread_mutex_lock(&queue->launcher_to_game_mutex);
+    int active = queue->launcher_to_game->head != 0;
+    pthread_mutex_unlock(&queue->launcher_to_game_mutex);
+    return active;
+}
+
 int touchcontroller_ios_receive(void* buf, size_t max_len) {
     queue_t* queue = ensure_queue();
     if (queue == NULL) return -1;

@@ -3,6 +3,12 @@
 ## 🇬🇧 English
 
 - Reviewed and fixed the Super resolution not working.
+- Fixed Distant Horizons crashing on iOS 26 (A12+ devices): the mod's zstd-jni native library is now pre-extracted from the DH jar and ad-hoc signed with a bundled ldid, so it loads from `java.library.path` instead of failing with "code signature invalid".
+
+## 🇻🇳 Tiếng Việt
+
+- Xem và sửa mod Super resolution không hoạt động.
+- Sửa Distant Horizons crash trên iOS 26 (máy A12+): thư viện zstd-jni của mod giờ được lấy sẵn từ jar DH và ký ad-hoc bằng ldid đi kèm trong app, load từ `java.library.path` thay vì báo lỗi "code signature invalid".
 
 ## 🇻🇳 Tiếng Việt
 

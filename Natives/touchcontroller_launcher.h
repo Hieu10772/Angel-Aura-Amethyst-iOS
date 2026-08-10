@@ -27,6 +27,7 @@ int touchcontroller_ios_receive(void* buf, size_t max_len);
 int touchcontroller_launcher_send(const void* buf, int len);
 size_t touchcontroller_launcher_game_drain_marker(void);
 int touchcontroller_launcher_game_drained_past(size_t marker);
+int touchcontroller_launcher_mod_active(void);
 
 #ifdef __cplusplus
 }

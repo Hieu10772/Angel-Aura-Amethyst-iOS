@@ -424,6 +424,9 @@ int launchJVMWithArgs(NSString *username, id launchTarget, int width, int height
             size_t availableMem = availableMemoryMB();
             if (availableMem > 0 && (size_t)allocmem > availableMem) {
                 NSLog(@"[JavaLauncher] Warning: requested %d MB heap exceeds the Jetsam kill allowance (~%zu MB); the game may be killed when its memory usage approaches the limit", allocmem, availableMem);
+                showDialog(localize(@"Warning", nil),
+                    [NSString stringWithFormat:@"You requested %d MB RAM, but the kill limit (Jetsam) of a Sideloaded install is only about %zu MB. Memory above this force-closes the game mid-play. Use Auto RAM or set a value below %zu MB.",
+                        allocmem, availableMem, availableMem]);
             }
         }
     }
