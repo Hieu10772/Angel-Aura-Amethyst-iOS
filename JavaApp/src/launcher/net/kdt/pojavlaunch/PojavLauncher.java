@@ -353,9 +353,15 @@ public class PojavLauncher {
         // Initialize the TouchController proxy (dormant until here).
         // Must run in the launcher's classloader, before the game main class,
         // so the shared ring-buffer transport and JNI refs are ready.
+        // Only spin it up when the game actually ships the touchcontroller
+        // mod; otherwise the socket/daemon sits idle and can cause issues.
+        boolean hasTouchControllerMod = Tools.hasModLibrary(Tools.getVersionInfo(args[1]), "touchcontroller");
+        System.out.println("[TouchController] touchcontroller mod present: " + hasTouchControllerMod);
         try {
-            TouchControllerManager.getInstance().initialize(
-                Integer.parseInt(size[0]), Integer.parseInt(size[1]));
+            if (hasTouchControllerMod) {
+                TouchControllerManager.getInstance().initialize(
+                    Integer.parseInt(size[0]), Integer.parseInt(size[1]));
+            }
         } catch (Throwable t) {
             System.err.println("[TouchController] initialize failed (optional): " + t);
         }
@@ -425,6 +431,25 @@ public class PojavLauncher {
             patchSpongeMixinServices();
         } catch (Throwable t) {
             System.err.println("[MixinFix] sponge-mixin services patch failed: " + t);
+        }
+        try {
+            net.kdt.pojavlaunch.touchcontroller.TransportPatcher.patchAll();
+        } catch (Throwable t) {
+            System.err.println("[TCLoader] touchcontroller Transport patch failed: " + t);
+        }
+
+        // Pre-extract the zstd-jni library Distant Horizons needs so DH's
+        // java.library.path lookup succeeds (its own tmp extraction is
+        // rejected by iOS unless the disable-library-validation entitlement
+        // is present, and the load succeeded on the first try is far more
+        // reliable than the second).
+        try {
+            String dhNativeDir = Tools.prepareDistantHorizonsNativeLib(version);
+            if (dhNativeDir != null) {
+                System.out.println("[DH Fix] DH native library ready at: " + dhNativeDir);
+            }
+        } catch (Throwable t) {
+            System.err.println("[DH Fix] prepareDistHorizonsNativeLib failed: " + t);
         }
 
         Tools.launchMinecraft(account, version);

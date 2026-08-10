@@ -1,5 +1,6 @@
 #include <mach/mach.h>
 #include <mach/task.h>
+#include <os/proc.h>
 #include <dirent.h>
 #include <dlfcn.h>
 #include <errno.h>
@@ -31,6 +32,40 @@ static void checkAndAddDhNativeLibPath(NSString *versionId);
 #define fm NSFileManager.defaultManager
 
 extern char **environ;
+
+// os_proc_available_memory() returns the bytes remaining before the current
+// process hits its dirty memory (Jetsam) limit — the actual kill limit the
+// OS applies to this process, unlike physical RAM or host free pages.
+// Non-jailbroken apps run under a fixed, dynamically-shrinking Jetsam limit;
+// when the process is JIT-debugged without the memorystatus entitlement, iOS
+// pins that limit at roughly 1GB regardless of the device, which is exactly
+// the "crash at 1GB on every device" symptom.
+static size_t availableMemoryMB(void) {
+    size_t avail = os_proc_available_memory();
+    if (avail == 0) {
+        return 0;
+    }
+    return (size_t)(avail / (1024 * 1024));
+}
+
+// Caps the requested heap so Java + JVM overhead + native GL/Metal buffers
+// always fit under the real Jetsam kill allowance. Returns the capped value.
+static int capAllocationToJetsamAllowance(int allocmem) {
+    if (getEntitlementValue(@"com.apple.private.memorystatus")) {
+        // updateJetsamControl() raised the task limit itself, no cap needed.
+        return allocmem;
+    }
+    size_t availableMem = availableMemoryMB();
+    if (availableMem > 0) {
+        int byAllowance = (int)((double)availableMem * 0.6);
+        if (byAllowance < allocmem) {
+            NSLog(@"[JavaLauncher] RAM capped: %d MB -> %d MB (only %zu MB left before the Jetsam kill limit; add the memorystatus entitlement to raise it)",
+                  allocmem, byAllowance, availableMem);
+            return (int)MAX(384, byAllowance);
+        }
+    }
+    return allocmem;
+}
 
 BOOL validateVirtualMemorySpace(size_t size) {
     size <<= 20; // convert to MB
@@ -313,6 +348,15 @@ int launchJVMWithArgs(NSString *username, id launchTarget, int width, int height
     NSLog(@"[JavaLauncher] RENDERER is set to %@\n", renderer);
     setenv("AMETHYST_RENDERER", renderer.UTF8String, 1);
 
+    // The TouchController mod (0.3.1-alpha13+) only activates its iOS
+    // platform when TOUCH_CONTROLLER_PROXY_SOCKET is set. It must be set
+    // BEFORE the JVM starts: the JVM snapshots the environment at boot and
+    // later setenv() calls are invisible to System.getenv(). The value is
+    // not a real socket path (the transport is an in-process ring buffer),
+    // so any non-empty value works; harmless when no mod is installed.
+    setenv("TOUCH_CONTROLLER_PROXY_SOCKET", "inproc:touchcontroller", 1);
+    NSLog(@"[JavaLauncher] TOUCH_CONTROLLER_PROXY_SOCKET set before JVM launch");
+
     // Apply Zink-specific environment variables if Zink renderer is selected
     if ([renderer hasPrefix:@"libOSMesa"]) {
         [ZinkConfig applyZinkEnvironmentFromPreferences];
@@ -357,12 +401,18 @@ int launchJVMWithArgs(NSString *username, id launchTarget, int width, int height
     }
 
     int allocmem;
+    NSLog(@"[JavaLauncher] Entitlements: memorystatus=%d increased-memory-limit=%d extended-virtual-addressing=%d disable-library-validation=%d",
+        getEntitlementValue(@"com.apple.private.memorystatus"),
+        getEntitlementValue(@"com.apple.developer.kernel.increased-memory-limit"),
+        getEntitlementValue(@"com.apple.developer.kernel.extended-virtual-addressing"),
+        getEntitlementValue(@"com.apple.security.cs.disable-library-validation"));
     if (getPrefBool(@"java.auto_ram")) {
         CGFloat autoRatio = getEntitlementValue(@"com.apple.private.memorystatus") ? 0.4 : 0.25;
         allocmem = roundf((NSProcessInfo.processInfo.physicalMemory / 1048576) * autoRatio);
     } else {
         allocmem = getPrefInt(@"java.allocated_memory");
     }
+    allocmem = capAllocationToJetsamAllowance(allocmem);
     NSLog(@"[JavaLauncher] Max RAM allocation is set to %d MB", allocmem);
     if (!validateVirtualMemorySpace(allocmem)) {
         UIKit_returnToSplitView();

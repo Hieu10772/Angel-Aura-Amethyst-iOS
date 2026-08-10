@@ -13,6 +13,11 @@
     <key>com.apple.developer.kernel.increased-memory-limit</key>
     <true/>
 
+    <!-- Allow loading ad-hoc-signed dylibs extracted at runtime (Distant
+         Horizons extracts libzstd-jni_dh-*.dylib into tmp and dlopens it) -->
+    <key>com.apple.security.cs.disable-library-validation</key>
+    <true/>
+
     <!-- Give ability to change Jetsam task limit by itself -->
     <key>com.apple.private.memorystatus</key>
     <true/>

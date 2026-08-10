@@ -1,16 +1,89 @@
-# AngelAuraAmethyst iOS — 1.1.3-beta.9
+# AngelAuraAmethyst iOS — 1.1.4-beta
+
+## 🇬🇧 English
+
+- Reviewed and fixed the Super resolution not working.
+
+## 🇻🇳 Tiếng Việt
+
+- Xem và sửa mod Super resolution không hoạt động.
+- Làm lại hệ thống nút, list khi chơi Game
+- Fixing mod TouchController
+- Update LTW render
+- Thêm nút copy, paste trong Game
+- Fix litematica mod not working
+- Thêm nhập file mrpack
+- Fix làm mờ ảnh/video nền lỗi(Thêm một lớp đằng trước video hoặc ảnh để làm mờ)
+- Fix lỗi JIT trên iOS 27
+- Update Render MobileGlues lên 1.3.5
+- Fix Vulkan mod
+- Add Ely.by
+
+---
+
+# AngelAuraAmethyst iOS — 1.1.3
+
 ```Cảm ơn L4d đã hỗ trợ mình trong việc sửa chữa vấn đề trên iOS 27(But not working :< I'm Sorry)```
+
 ## 🇬🇧 English
 
 - Fixed the Distant Horizons mod not working on iOS 26.
 - Fixed the crash issue when reaching 1000MB RAM on all devices.
-- Reviewed and fixed the Super Resolution mod not working.
+- Reviewed and fixed the Touch Controller not working.
+- Fixed crashes on iOS 26.
+- Fixed the issue of not being able to type Vietnamese when using an external keyboard.
+- Fixed crashes when playing Minecraft Vanilla.
+- Fixed the issue of automatic downloads when browsing mods, modpacks, etc.
+- Added and modified features to change the mouse cursor style.
+- Fixes crash issues when exiting the game using a code.
+- Forge 26.x (e.g. Forge for Minecraft 1.21.2) now actually launches — the missing `forge-*-universal.jar` is added to the game classpath so the "forge" system mod is detected and the game no longer crashes with "Failed to find system mod: forge".
+- News panel now shows only the changelog of the version you are running (filtered from news.md).
+- Improved markdown rendering — headings, bold/italic, lists, code, links and tables are now rendered correctly.
+- Forge & NeoForge now install correctly — the official installer jar is downloaded and run through the built-in "Execute .jar" environment.
+- Import local `.mrpack` modpacks — the launcher downloads everything inside and sets up the loader automatically.
+- Fixed Forge installer downloads (moved to the official MinecraftForge Maven repository).
+- Modpacks needing Forge/NeoForge now auto-install the loader.
+- "Execute .jar" gained an "Install (headless)" option for installer jars.
+- Version list refreshes automatically after installing.
 
 ## 🇻🇳 Tiếng Việt
 
 - Sửa lỗi Distant Horizons mod không hoạt động trên iOS 26.
 - Sửa lỗi crash khi đạt 1000MB RAM trên mọi thiết bị.
-- Xem và sửa mod Super resolution không hoạt động.
+- Xem và sửa mod Touch Controller không hoạt động.
+- Sửa lỗi crash trên iOS 26.
+- Sửa lỗi không gõ được tiếng Việt khi sử dụng bàn phím ngoài.
+- Sửa lỗi crash khi chơi Minecraft Vanilla. 
+- Sửa lỗi tự động load khi duyệt mod, modpacks,...
+- Thêm và sửa tính năng thay đổi hình dáng trỏ chuột. 
+- Sửa lỗi crash với mã khi thoát game.
+- Forge 26.x (vd. Forge cho Minecraft 1.21.2) giờ chạy được thật sự — bổ sung `forge-*-universal.jar` vào classpath game để nhận diện system mod "forge", không còn crash lỗi "Failed to find system mod: forge".
+- Bảng tin chỉ hiển thị changelog đúng phiên bản launcher bạn đang chạy (lọc từ news.md).
+- Cải thiện render markdown — tiêu đề, in đậm/nghiêng, danh sách, code, link và bảng hiển thị đúng.
+- Forge & NeoForge cài đúng cách — tải installer jar chính thức và chạy qua môi trường "Execute .jar" có sẵn.
+- Nhập modpack `.mrpack` cục bộ — launcher tự tải toàn bộ nội dung và tự cài loader.
+- Sửa lỗi tải installer Forge (dùng kho Maven chính thức của MinecraftForge).
+- Modpack cần Forge/NeoForge tự động cài loader.
+- "Execute .jar" thêm nút "Install (headless)" cho file installer.
+- Danh sách version tự làm mới sau khi cà
+
+---
+
+# AngelAuraAmethyst iOS — 1.1.3-beta.9
+
+```Cảm ơn L4d đã hỗ trợ mình trong việc sửa chữa vấn đề trên iOS 27(But not working :< I'm Sorry)```
+
+## 🇬🇧 English
+
+- Fixed the Distant Horizons mod not working on iOS 26.
+- Fixed the crash issue when reaching 1000MB RAM on all devices.
+- Reviewed and fixed the Touch Controller not working.
+
+## 🇻🇳 Tiếng Việt
+
+- Sửa lỗi Distant Horizons mod không hoạt động trên iOS 26.
+- Sửa lỗi crash khi đạt 1000MB RAM trên mọi thiết bị.
+- Xem và sửa mod Touch Controller không hoạt động.
 
 ---
 

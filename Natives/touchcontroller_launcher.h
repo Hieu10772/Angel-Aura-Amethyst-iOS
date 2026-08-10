@@ -5,6 +5,8 @@
 #ifndef TOUCHCONTROLLER_LAUNCHER_H
 #define TOUCHCONTROLLER_LAUNCHER_H
 
+#include <stddef.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -21,10 +23,13 @@ void touchcontroller_hideKeyboard();
 // touchcontroller_ios_receive returns the message length, 0 when empty.
 int touchcontroller_queue_ensure(void);
 int touchcontroller_ios_send(const void* buf, int len);
-int touchcontroller_ios_receive(void* buf);
+int touchcontroller_ios_receive(void* buf, size_t max_len);
+int touchcontroller_launcher_send(const void* buf, int len);
+size_t touchcontroller_launcher_game_drain_marker(void);
+int touchcontroller_launcher_game_drained_past(size_t marker);
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif // TOUCHCONTROLLER_LAUNCHER_H
+#endif // TOUCH

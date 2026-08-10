@@ -63,6 +63,13 @@ public final class Library {
             // AngelAuraAmethyst (this app's binary) exposes JNI_OnLoad which must run
             // so runtimeJavaVMPtr gets set; otherwise JNI_LWJGL_changeRenderer (called
             // from pojavInitOpenGL) SIGSEGVs dereferencing a NULL JavaVM*.
+            // NOTE: the TouchController game-side dylib
+            // (libTouchControllerGameBridge.dylib) must NOT be loaded here: this
+            // class initializes in the launcher classloader (Fabric/Knot delegates
+            // org.lwjgl.* to it), which would register the dylib with the wrong
+            // classloader and the mod's Transport natives could never resolve.
+            // TransportPatcher injects the load into the mod's Transport.<clinit>
+            // instead, so it runs in Knot.
             if (Platform.get() == Platform.MACOSX) {
                 System.load(System.getenv("BUNDLE_PATH") + "/AngelAuraAmethyst");
             } else if (Platform.get() == Platform.LINUX) {

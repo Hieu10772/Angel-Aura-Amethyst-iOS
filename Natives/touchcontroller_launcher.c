@@ -16,6 +16,7 @@
 #include <jni.h>
 #include <pthread.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -177,6 +178,12 @@ Java_net_kdt_pojavlaunch_touchcontroller_IosSocketTransport_nativeInit(JNIEnv* e
         return 0;
     }
 
+    // The mod (0.3.1-alpha13+) only activates its iOS platform when
+    // TOUCH_CONTROLLER_PROXY_SOCKET is set. The value is not used as a real
+    // socket path: the transport is an in-process ring buffer, so any
+    // non-empty value unlocks the mod's IosPlatform.
+    setenv("TOUCH_CONTROLLER_PROXY_SOCKET", "inproc:touchcontroller", 1);
+
     // Attach the JNI bridge refs here: the launcher classloader is active at
     // this point, so FindClass for TouchControllerManager resolves correctly.
     JavaVM* vm = NULL;
@@ -200,6 +207,11 @@ Java_net_kdt_pojavlaunch_touchcontroller_IosSocketTransport_nativeSend(JNIEnv* e
     jbyte* data = (*env)->GetByteArrayElements(env, buffer, NULL);
     if (data == NULL) return;
     enqueue_message(queue->launcher_to_game, &queue->launcher_to_game_mutex, data + offset, length);
+    if (length >= 4) {
+        int type = ((data[offset] & 0xFF) << 24) | ((data[offset + 1] & 0xFF) << 16)
+            | ((data[offset + 2] & 0xFF) << 8) | (data[offset + 3] & 0xFF);
+        fprintf(stderr, "[TCL] launcher send n=%d type=%d\n", (int)length, type);
+    }
     (*env)->ReleaseByteArrayElements(env, buffer, data, JNI_ABORT);
 }
 
@@ -246,10 +258,44 @@ int touchcontroller_ios_send(const void* buf, int len) {
     return enqueue_message(queue->game_to_launcher, &queue->game_to_launcher_mutex, buf, len);
 }
 
-int touchcontroller_ios_receive(void* buf) {
+// Launcher -> game (read by the mod's Transport.receive). Used by the C touch
+// path (touchcontroller_jni_bridge.c), which bypasses Java entirely.
+int touchcontroller_launcher_send(const void* buf, int len) {
     queue_t* queue = ensure_queue();
     if (queue == NULL) return -1;
-    return dequeue_message(queue->launcher_to_game, &queue->launcher_to_game_mutex, buf, MAX_MESSAGE_SIZE);
+    return enqueue_message(queue->launcher_to_game, &queue->launcher_to_game_mutex, buf, len);
+}
+
+// Drain tracking: the mod's receive drains the whole launcher_to_game queue
+// once per render frame. The C touch path records a marker (the game's read
+// position) before enqueueing an AddPointerMessage, then delays the matching
+// RemovePointerMessage until the mod has drained past that marker. This keeps
+// Add+Remove out of the same drain batch (which would silently drop quick
+// taps) while keeping release latency to ~1 render frame.
+size_t touchcontroller_launcher_game_drain_marker(void) {
+    queue_t* queue = ensure_queue();
+    if (queue == NULL) return 0;
+    pthread_mutex_lock(&queue->launcher_to_game_mutex);
+    size_t head = queue->launcher_to_game->head;
+    pthread_mutex_unlock(&queue->launcher_to_game_mutex);
+    return head;
+}
+
+// Non-zero once the game's dequeue position has advanced past the given
+// marker (i.e. every message enqueued after it has been consumed).
+int touchcontroller_launcher_game_drained_past(size_t marker) {
+    queue_t* queue = ensure_queue();
+    if (queue == NULL) return 1;
+    pthread_mutex_lock(&queue->launcher_to_game_mutex);
+    int drained = queue->launcher_to_game->head != marker;
+    pthread_mutex_unlock(&queue->launcher_to_game_mutex);
+    return drained;
+}
+
+int touchcontroller_ios_receive(void* buf, size_t max_len) {
+    queue_t* queue = ensure_queue();
+    if (queue == NULL) return -1;
+    return dequeue_message(queue->launcher_to_game, &queue->launcher_to_game_mutex, buf, max_len);
 }
 
 // ===== JNI: vibration & keyboard (unchanged) =====

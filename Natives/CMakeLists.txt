@@ -206,6 +206,25 @@ set_target_properties(TouchControllerBridge PROPERTIES
   INSTALL_NAME_DIR "@rpath"
 )
 
+# TouchController game-side JNI bridge: stubs for
+# top.fifthlight.touchcontroller.common.platform.ios.Transport, loaded by the
+# game's Knot classloader (via LWJGL's Library.<clinit>). It MUST be a dylib:
+# the launcher loads the main executable first (UIKit static init), so a Knot
+# System.load of the executable fails with "already loaded in another
+# classloader" and the game can never resolve JNI symbols that live in the
+# executable (as seen with Transport.new -> UnsatisfiedLinkError).
+add_library(TouchControllerGameBridge SHARED
+  touchcontroller_game_bridge.c
+)
+target_link_libraries(TouchControllerGameBridge
+  "${GLOBAL_LDFLAGS}"
+  "-Wl,-undefined,dynamic_lookup"
+)
+set_target_properties(TouchControllerGameBridge PROPERTIES
+  MACOSX_RPATH TRUE
+  INSTALL_NAME_DIR "@rpath"
+)
+
 # Angel Aura Amethyst
 add_executable(AngelAuraAmethyst
   dyld_bypass_validation.m
@@ -280,8 +299,6 @@ egl_bridge.m
     input_bridge_v3.m
     ios_uikit_bridge.m
     utils.m
-
-    touchcontroller_game_bridge.c
 
    # UI
    ../UI/Common/ThemeManager.m

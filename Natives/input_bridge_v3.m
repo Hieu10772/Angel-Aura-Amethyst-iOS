@@ -546,6 +546,28 @@ typedef struct {
     const char *text;    /* UTF-8 */
 } AASDL_TextInputEvent;
 
+/* SDL3 touch finger events. TouchController 0.3.1-alpha13+ drives its iOS
+ * input through SdlPlatform, which only consumes SDL_EVENT_FINGER_* events;
+ * the launcher's UIKit layers intercept all touches, so we mirror them here
+ * like the mouse/keyboard events above. Layout matches the vendored SDL3 fork
+ * (include/SDL3/SDL_events.h: struct SDL_TouchFingerEvent). */
+#define SDL_EVENT_FINGER_DOWN 0x700
+#define SDL_EVENT_FINGER_UP 0x701
+#define SDL_EVENT_FINGER_MOTION 0x702
+#define SDL_EVENT_FINGER_CANCELED 0x703
+
+typedef struct {
+    uint32_t type;
+    uint32_t reserved;
+    uint64_t timestamp;
+    uint64_t touchID;    /* SDL_TouchID */
+    uint64_t fingerID;   /* SDL_FingerID */
+    float x, y;          /* normalized 0..1 */
+    float dx, dy;
+    float pressure;      /* normalized 0..1 */
+    uint32_t windowID;
+} AASDL_TouchFingerEvent;  /* 56 bytes, fits the 128-byte SDL_Event union */
+
 typedef union {
     uint8_t raw[128];    /* matches sizeof(SDL_Event) */
 } AASDL_Event;
@@ -788,6 +810,24 @@ static void aasdl_pushTextInput(uint32_t codepoint) {
     aasdl_PushEvent(&ev);
 }
 
+/* Mirrors a UIKit touch into an SDL touch finger event. The launcher tracks a
+ * single primary touch, so touchID/fingerID are fixed; x/y are normalized to
+ * the game surface like SDL's own touch pipeline. Consumed by TouchController
+ * (SdlPlatform) and ignored by anything that only looks at mouse events. */
+static void aasdl_pushFinger(uint32_t type, CGFloat x, CGFloat y) {
+    AASDL_Event ev;
+    memset(&ev, 0, sizeof(ev));
+    AASDL_TouchFingerEvent *f = (AASDL_TouchFingerEvent *) ev.raw;
+    f->type = type;
+    f->touchID = 1;
+    f->fingerID = 1;
+    if (windowWidth > 0) f->x = (float) x / (float) windowWidth;
+    if (windowHeight > 0) f->y = (float) y / (float) windowHeight;
+    f->pressure = 1.0f;
+    f->windowID = aasdl_windowID();
+    aasdl_PushEvent(&ev);
+}
+
 /* GLFW keycode -> SDL3 scancode + keycode (vendored fork enum values) */
 typedef struct {
     int glfw;
@@ -957,6 +997,28 @@ void CallbackBridge_nativeSendCursorPos(char event, CGFloat x, CGFloat y) {
                 yrel = (float) y;
             }
             aasdl_pushMouseMotion(mx, my, xrel, yrel, aasdl_buttons);
+        }
+    }
+
+    /* TouchController (SdlPlatform) consumes SDL finger events; mirror the
+     * launcher's primary touch alongside the mouse translation. Grab mode
+     * (camera control) still gets both: the mod only reacts inside its UI. */
+    if (aasdl_available()) {
+        switch (event) {
+            case ACTION_DOWN:
+                aasdl_pushFinger(SDL_EVENT_FINGER_DOWN, cursorX, cursorY);
+                break;
+            case ACTION_MOVE:
+                aasdl_pushFinger(SDL_EVENT_FINGER_MOTION, cursorX, cursorY);
+                break;
+            case ACTION_UP:
+                aasdl_pushFinger(SDL_EVENT_FINGER_UP, cursorX, cursorY);
+                break;
+            case ACTION_CANCEL:
+                aasdl_pushFinger(SDL_EVENT_FINGER_CANCELED, cursorX, cursorY);
+                break;
+            default:
+                break;
         }
     }
 }

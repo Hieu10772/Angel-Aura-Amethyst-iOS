@@ -50,7 +50,9 @@ static GameSurfaceView* pojavWindow;
 @interface SurfaceViewController ()<UITextFieldDelegate, UIGestureRecognizerDelegate> {
     // TouchController integration
     NSUInteger nextTouchControllerIndex;
-    NSMutableDictionary<NSValue*, NSNumber*>* touchControllerIndexMap;
+    // Retains UITouch keys so we can safely inspect their phase during the
+    // stale-touch sweep (see sendTouchControllerStaleUps).
+    NSMapTable<id, NSNumber*>* touchControllerIndexMap;
 }
 
 @property(nonatomic) NSDictionary* metadata;
@@ -159,7 +161,8 @@ static GameSurfaceView* pojavWindow;
     
     // Initialize TouchController touch tracking
     nextTouchControllerIndex = 1;
-    touchControllerIndexMap = [NSMutableDictionary dictionary];
+    touchControllerIndexMap = [NSMapTable mapTableWithKeyOptions:NSPointerFunctionsStrongMemory | NSPointerFunctionsObjectPointerPersonality
+                                                      valueOptions:NSPointerFunctionsStrongMemory | NSPointerFunctionsObjectPersonality];
     
     self.surfaceView = [[GameSurfaceView alloc] initWithFrame:self.view.frame];
     self.surfaceView.layer.contentsScale = screenScale * resolutionScale;
@@ -725,18 +728,18 @@ static GameSurfaceView* pojavWindow;
     if (event == ACTION_DOWN) {
         int index = touchcontroller_onTouchDown(normX, normY);
         if (index >= 0) {
-            [touchControllerIndexMap setObject:@(index) forKey:[NSValue valueWithNonretainedObject:touchEvent]];
+            [touchControllerIndexMap setObject:@(index) forKey:touchEvent];
         }
     } else if (event == ACTION_MOVE || event == ACTION_MOVE_MOTION) {
-        NSNumber* indexObj = [touchControllerIndexMap objectForKey:[NSValue valueWithNonretainedObject:touchEvent]];
+        NSNumber* indexObj = [touchControllerIndexMap objectForKey:touchEvent];
         if (indexObj) {
             touchcontroller_onTouchMove([indexObj intValue], normX, normY);
         }
     } else if (event == ACTION_UP || event == ACTION_CANCEL) {
-        NSNumber* indexObj = [touchControllerIndexMap objectForKey:[NSValue valueWithNonretainedObject:touchEvent]];
+        NSNumber* indexObj = [touchControllerIndexMap objectForKey:touchEvent];
         if (indexObj) {
             touchcontroller_onTouchUp([indexObj intValue]);
-            [touchControllerIndexMap removeObjectForKey:[NSValue valueWithNonretainedObject:touchEvent]];
+            [touchControllerIndexMap removeObjectForKey:touchEvent];
         }
     }
 
@@ -1181,10 +1184,49 @@ static GameSurfaceView* pojavWindow;
 #pragma mark - Input: On-screen touch events
 
 int touchesMovedCount;
+
+// TouchController: sweep the index map for touches that ended/cancelled
+// without a matching ACTION_UP (UIKit can drop touchesEnded during stalls),
+// which would otherwise leave the mod holding a button forever. Re-sending an
+// Up for an already-released index is harmless (the mod's removePointer is a
+// no-op once the pointer is already Released).
+- (void)sendTouchControllerStaleUps
+{
+    NSMutableArray* staleTouches = [NSMutableArray array];
+    for (id key in [touchControllerIndexMap keyEnumerator]) {
+        UITouch* touch = (UITouch*)key;
+        if (touch.phase == UITouchPhaseEnded || touch.phase == UITouchPhaseCancelled) {
+            [staleTouches addObject:touch];
+        }
+    }
+    for (UITouch* touch in staleTouches) {
+        NSNumber* indexObj = [touchControllerIndexMap objectForKey:touch];
+        if (indexObj) {
+            touchcontroller_onTouchUp([indexObj intValue]);
+            [touchControllerIndexMap removeObjectForKey:touch];
+        }
+    }
+}
+
+// Lazy 0.25s sweep timer, so a stuck pointer is recovered even if the user
+// stops touching entirely. No-op when the index map is empty. 0.5s was too
+// slow at the game's ~14fps (7+ render frames of stuck hold/break).
+static NSTimer* staleTouchSweepTimer = nil;
+
+- (void)ensureTouchControllerSweepTimer
+{
+    if (staleTouchSweepTimer != nil) return;
+    staleTouchSweepTimer = [NSTimer scheduledTimerWithTimeInterval:0.25 repeats:YES block:^(NSTimer* timer) {
+        [self sendTouchControllerStaleUps];
+    }];
+}
+
 // Equals to Android ACTION_DOWN
 - (void)touchesBegan:(NSSet *)touches withEvent:(UIEvent *)event
 {
     [super touchesBegan:touches withEvent:event];
+    [self ensureTouchControllerSweepTimer];
+    [self sendTouchControllerStaleUps];
     int i = 0;
     for (UITouch *touch in touches) {
         if (touch.type == UITouchTypeIndirectPointer) {
@@ -1209,6 +1251,7 @@ int touchesMovedCount;
 - (void)touchesMoved:(NSSet *)touches withEvent:(UIEvent *)event
 {
     [super touchesMoved:touches withEvent:event];
+    [self sendTouchControllerStaleUps];
 
     for (UITouch *touch in touches) {
         if (touch.type == UITouchTypeIndirectPointer) {
@@ -1236,6 +1279,7 @@ int touchesMovedCount;
         }
         [self sendTouchEvent:touch withUIEvent:event withEvent:ACTION_UP];
     }
+    [self sendTouchControllerStaleUps];
 }
 
 // Equals to Android ACTION_UP

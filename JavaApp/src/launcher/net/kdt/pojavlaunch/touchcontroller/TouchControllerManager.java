@@ -45,6 +45,10 @@ public class TouchControllerManager {
      * Must be called before the game main class is loaded.
      */
     public void initialize(int width, int height) {
+        System.err.println("[TCJ] initialize cl=" + TouchControllerManager.class.getClassLoader()
+            + " identity=" + System.identityHashCode(TouchControllerManager.class)
+            + " thread=" + Thread.currentThread().getName()
+            + " tcl=" + Thread.currentThread().getContextClassLoader());
         if (initialized) {
             System.out.println(TAG + ": Already initialized");
             return;
@@ -105,6 +109,12 @@ public class TouchControllerManager {
      */
     public static int onTouchDown(float x, float y) {
         TouchControllerManager manager = getInstance();
+        System.err.println("[TCJ] onTouchDown cl=" + TouchControllerManager.class.getClassLoader()
+            + " identity=" + System.identityHashCode(TouchControllerManager.class)
+            + " thread=" + Thread.currentThread().getName()
+            + " tcl=" + Thread.currentThread().getContextClassLoader()
+            + " initialized=" + manager.initialized
+            + " proxyClient=" + manager.proxyClient);
         if (!manager.initialized || manager.proxyClient == null) return -1;
 
         int index = manager.nextPointerIndex++;

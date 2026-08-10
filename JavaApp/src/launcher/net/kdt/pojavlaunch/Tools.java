@@ -304,6 +304,39 @@ public final class Tools {
         }
     }
 
+    // The TouchController mod (v0.3.1-alpha13+) defaults to tick thresholds
+    // calibrated for 60fps Android. On the iOS software renderer the game runs
+    // at ~14fps, so "hold to break" (viewHoldDetectTicks=5 -> ~350ms) fires on
+    // ordinary placement taps. Seed a minimal config with thresholds tuned for
+    // the actual frame rate, so taps place blocks and only deliberate long
+    // holds break. Only written when absent: in-game TouchController settings
+    // take precedence and are never overwritten.
+    private static void seedTouchControllerConfig(File gameDir) {
+        try {
+            File cfgDir = new File(gameDir, "config/touchcontroller");
+            File cfgFile = new File(cfgDir, "config.json");
+            if (cfgFile.exists()) {
+                return;
+            }
+            cfgDir.mkdirs();
+            String json = "{\n"
+                + "  \"control\": {\n"
+                + "    \"viewHoldDetectTicks\": 8,\n"
+                + "    \"creativeBreakDetectTicks\": 10\n"
+                + "  }\n"
+                + "}\n";
+            BufferedWriter writer = new BufferedWriter(new java.io.FileWriter(cfgFile));
+            try {
+                writer.write(json);
+            } finally {
+                writer.close();
+            }
+            System.out.println("Seeded TouchController config: " + cfgFile.getAbsolutePath());
+        } catch (Exception e) {
+            System.err.println("Failed to seed TouchController config: " + e.getMessage());
+        }
+    }
+
     public static String[] getMinecraftArgs(MinecraftAccount profile, JMinecraftVersionList.Version versionInfo) {
         String username = profile.username.replace("Demo.", "");
         String versionName = versionInfo.id;
@@ -313,6 +346,8 @@ public final class Tools {
 
         File gameDir = new File(Tools.DIR_GAME_PROFILE);
         gameDir.mkdirs();
+
+        seedTouchControllerConfig(gameDir);
 
         Map<String, String> varArgMap = new ArrayMap<String, String>();
         varArgMap.put("auth_session", profile.accessToken); // For legacy versions of MC
@@ -828,6 +863,35 @@ createLibraryInfo(libItem);
     private static final String ZSTD_LIB_NAME_ALT = "libzstd-jni_dh.dylib"; // fallback
 
     /**
+     * Detect if a mod with the given keyword is in the library list.
+     */
+    public static boolean hasModLibrary(JMinecraftVersionList.Version versionInfo, String keyword) {
+        String kw = keyword.toLowerCase();
+        if (versionInfo != null && versionInfo.libraries != null) {
+            for (DependentLibrary lib : versionInfo.libraries) {
+                if (lib.name != null && lib.name.toLowerCase().contains(kw)) {
+                    return true;
+                }
+            }
+        }
+        // Fallback: the mod jar may have been dropped manually into the
+        // instance's mods folder instead of the version libraries.
+        String[] modDirs = {DIR_GAME_PROFILE + "/mods", DIR_GAME_PROFILE + "/.minecraft/mods"};
+        for (String dirPath : modDirs) {
+            File dir = new File(dirPath);
+            if (!dir.isDirectory()) continue;
+            File[] jars = dir.listFiles((d, name) -> name.endsWith(".jar"));
+            if (jars == null) continue;
+            for (File jar : jars) {
+                if (jar.getName().toLowerCase().contains(kw)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
      * Detect if Distant Horizons mod is in the library list.
      */
     public static boolean hasDistantHorizonsMod(DependentLibrary[] libraries) {
@@ -885,13 +949,28 @@ createLibraryInfo(libItem);
     }
 
     private static String findDhJarPath(JMinecraftVersionList.Version versionInfo) {
-        if (versionInfo.libraries == null) return null;
-        for (DependentLibrary lib : versionInfo.libraries) {
-            if (lib.name != null && lib.name.toLowerCase().contains(DH_MOD_ID)) {
-                String artifactPath = artifactToPath(lib);
-                File jarFile = new File(DIR_HOME_LIBRARY, artifactPath);
-                if (jarFile.exists()) {
-                    return jarFile.getAbsolutePath();
+        if (versionInfo.libraries != null) {
+            for (DependentLibrary lib : versionInfo.libraries) {
+                if (lib.name != null && lib.name.toLowerCase().contains(DH_MOD_ID)) {
+                    String artifactPath = artifactToPath(lib);
+                    File jarFile = new File(DIR_HOME_LIBRARY, artifactPath);
+                    if (jarFile.exists()) {
+                        return jarFile.getAbsolutePath();
+                    }
+                }
+            }
+        }
+        // Fallback: the mod jar may have been dropped manually into the
+        // instance's mods folder instead of the version libraries.
+        String[] modDirs = {DIR_GAME_PROFILE + "/mods", DIR_GAME_PROFILE + "/.minecraft/mods"};
+        for (String dirPath : modDirs) {
+            File dir = new File(dirPath);
+            if (!dir.isDirectory()) continue;
+            File[] jars = dir.listFiles((d, name) -> name.endsWith(".jar"));
+            if (jars == null) continue;
+            for (File jar : jars) {
+                if (jar.getName().toLowerCase().contains("distant")) {
+                    return jar.getAbsolutePath();
                 }
             }
         }
@@ -966,9 +1045,12 @@ createLibraryInfo(libItem);
                 return false;
             }
         } catch (Exception e) {
-            System.err.println("[DH Fix] Error signing library: " + e.getMessage());
-            e.printStackTrace();
-            return false;
+            // iOS has no /usr/bin/codesign. The app carries the
+            // com.apple.security.cs.disable-library-validation entitlement,
+            // so an unsigned/ad-hoc dylib in the app container loads fine
+            // anyway; do not fail the launch over this.
+            System.err.println("[DH Fix] codesign unavailable (" + e.getMessage() + "), skipping (disable-library-validation covers it)");
+            return true;
         }
     }
 }
