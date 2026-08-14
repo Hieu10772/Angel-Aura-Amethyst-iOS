@@ -1325,17 +1325,16 @@ static NSTimer* staleTouchSweepTimer = nil;
 
 - (void)updateCursorForCurrentPosition {
     if (!virtualMouseEnabled) return;
-
     CGPoint point = virtualMouseFrame.origin;
-
-    UIView *hitView = [self.view hitTest:point withEvent:nil];
-
+    UIView *hitView = [self.ctrlView hitTest:[self.ctrlView convertPoint:point fromView:self.view]
+                                  withEvent:nil];
     if ([hitView isKindOfClass:[UITextField class]] ||
         [hitView isKindOfClass:[UITextView class]]) {
         [CursorManager setCursorType:CursorTypeIBeam];
     }
     else if ([hitView isKindOfClass:[UIButton class]] ||
-             [hitView isKindOfClass:[UIControl class]]) {
+             [hitView isKindOfClass:[UIControl class]] ||
+             [hitView isKindOfClass:[ControlButton class]]) {
         [CursorManager setCursorType:CursorTypeHand];
     }
     else {
