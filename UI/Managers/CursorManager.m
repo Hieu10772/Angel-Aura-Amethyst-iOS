@@ -3,6 +3,12 @@
 #import <ImageIO/ImageIO.h>
 #import <string.h>
 
+static NSString * const kNormalCursorKey   = @"normal_cursor";
+static NSString * const kHandCursorKey     = @"hand_cursor";
+static NSString * const kIBeamCursorKey    = @"ibeam_cursor";
+static NSString * const kResizeEWCursorKey = @"resize_ew_cursor";
+static NSString * const kResizeNSCursorKey = @"resize_ns_cursor";
+
 static NSString *const kCursorsDirName = @"cursors";
 static NSString *const kDefaultCursorName = @"default";
 static NSString *const kCurrentCursorPrefKey = @"control.virtmouse_cursor";
@@ -247,6 +253,80 @@ static NSString *const kImageGifName = @"image.gif";
     frame.origin.x += dispX;
     frame.origin.y += dispY;
     return frame;
+}
+
++ (NSString *)normalCursorName {
+    return [[NSUserDefaults standardUserDefaults]
+        stringForKey:kNormalCursorKey] ?: @"default";
+}
+
++ (void)setNormalCursorName:(NSString *)name {
+    [[NSUserDefaults standardUserDefaults]
+        setObject:name forKey:kNormalCursorKey];
+}
+
++ (NSString *)handCursorName {
+    return [[NSUserDefaults standardUserDefaults]
+        stringForKey:kHandCursorKey] ?: @"hand";
+}
+
++ (void)setHandCursorName:(NSString *)name {
+    [[NSUserDefaults standardUserDefaults]
+        setObject:name forKey:kHandCursorKey];
+}
+
++ (NSString *)ibeamCursorName {
+    return [[NSUserDefaults standardUserDefaults]
+        stringForKey:kIBeamCursorKey] ?: @"text";
+}
+
++ (void)setIBeamCursorName:(NSString *)name {
+    [[NSUserDefaults standardUserDefaults]
+        setObject:name forKey:kIBeamCursorKey];
+}
+
++ (NSString *)resizeEWCursorName {
+    return [[NSUserDefaults standardUserDefaults]
+        stringForKey:kResizeEWCursorKey] ?: @"resize_ew";
+}
+
++ (void)setResizeEWCursorName:(NSString *)name {
+    [[NSUserDefaults standardUserDefaults]
+        setObject:name forKey:kResizeEWCursorKey];
+}
+
++ (NSString *)resizeNSCursorName {
+    return [[NSUserDefaults standardUserDefaults]
+        stringForKey:kResizeNSCursorKey] ?: @"resize_ns";
+}
+
++ (void)setResizeNSCursorName:(NSString *)name {
+    [[NSUserDefaults standardUserDefaults]
+        setObject:name forKey:kResizeNSCursorKey];
+}
+
++ (void)setCursorType:(CursorType)type {
+    switch (type) {
+        case CursorTypeHand:
+            [self setCurrentCursorName:[self handCursorName]];
+            break;
+
+        case CursorTypeIBeam:
+            [self setCurrentCursorName:[self ibeamCursorName]];
+            break;
+
+        case CursorTypeResizeEW:
+            [self setCurrentCursorName:[self resizeEWCursorName]];
+            break;
+
+        case CursorTypeResizeNS:
+            [self setCurrentCursorName:[self resizeNSCursorName]];
+            break;
+
+        default:
+            [self setCurrentCursorName:[self normalCursorName]];
+            break;
+    }
 }
 
 @end
