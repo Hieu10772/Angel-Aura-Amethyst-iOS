@@ -48,3 +48,19 @@ NS_ASSUME_NONNULL_BEGIN
 @end
 
 NS_ASSUME_NONNULL_END
+
+#import "CursorType.h"
+
++ (NSString *)normalCursorName;
++ (NSString *)handCursorName;
++ (NSString *)ibeamCursorName;
++ (NSString *)resizeEWCursorName;
++ (NSString *)resizeNSCursorName;
+
++ (void)setNormalCursorName:(NSString *)name;
++ (void)setHandCursorName:(NSString *)name;
++ (void)setIBeamCursorName:(NSString *)name;
++ (void)setResizeEWCursorName:(NSString *)name;
++ (void)setResizeNSCursorName:(NSString *)name;
+
++ (void)setCursorType:(CursorType)type;
