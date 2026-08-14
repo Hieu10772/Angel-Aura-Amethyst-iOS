@@ -198,34 +198,42 @@
 }
 
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
-if (indexPath.section == 0) {
-    cell.accessoryView = nil;
-    cell.detailTextLabel.textColor = ThemeManager.shared.secondaryTextColor;
-    switch (indexPath.row) {
-        case 0:
-            cell.textLabel.text = @"Hand Cursor";
-            cell.detailTextLabel.text = CursorManager.handCursorName;
-            break;
-        case 1:
-            cell.textLabel.text = @"IBeam Cursor";
-            cell.detailTextLabel.text = CursorManager.ibeamCursorName;
-            break;
-        case 2:
-            cell.textLabel.text = @"Resize(EW) Cursor";
-            cell.detailTextLabel.text = CursorManager.resizeEWCursorName;
-            break;
-        case 3:
-            cell.textLabel.text = @"Resize(NS) Cursor";
-            cell.detailTextLabel.text = CursorManager.resizeNSCursorName;
-            break;
-        case 4:
-            cell.textLabel.text = @"Normal Cursor";
-            cell.detailTextLabel.text = CursorManager.normalCursorName;
-            break;
+    if (indexPath.section == 0) {
+        UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:@"TypeCell"];
+        if (!cell) {
+            cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleValue1
+            reuseIdentifier:@"TypeCell"];
+            cell.backgroundColor = ThemeManager.shared.cardBackgroundColor;
+            cell.textLabel.font = [UIFont systemFontOfSize:15 weight:UIFontWeightSemibold];
+            cell.detailTextLabel.font = [UIFont systemFontOfSize:12];
+        }
+        cell.textLabel.textColor = ThemeManager.shared.primaryTextColor;
+        cell.detailTextLabel.textColor = ThemeManager.shared.secondaryTextColor;
+        switch (indexPath.row) {
+            case 0:
+                cell.textLabel.text = @"Hand Cursor";
+                cell.detailTextLabel.text = CursorManager.handCursorName;
+                break;
+            case 1:
+                cell.textLabel.text = @"IBeam Cursor";
+                cell.detailTextLabel.text = CursorManager.ibeamCursorName;
+                break;
+            case 2:
+                cell.textLabel.text = @"Resize(EW) Cursor";
+                cell.detailTextLabel.text = CursorManager.resizeEWCursorName;
+                break;
+            case 3:
+                cell.textLabel.text = @"Resize(NS) Cursor";
+                cell.detailTextLabel.text = CursorManager.resizeNSCursorName;
+                break;
+            case 4:
+                cell.textLabel.text = @"Normal Cursor";
+                cell.detailTextLabel.text = CursorManager.normalCursorName;
+                break;
+        }
+        return cell;
     }
-    cell.textLabel.textColor = ThemeManager.shared.primaryTextColor;
-    return cell;
-}
+    
     UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:@"CursorCell"];
     if (!cell) {
         cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleSubtitle reuseIdentifier:@"CursorCell"];
