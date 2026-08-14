@@ -1327,31 +1327,7 @@ static NSTimer* staleTouchSweepTimer = nil;
     if (!virtualMouseEnabled || isGrabbing) {
         return;
     }
-    CGRect cursorFrame = self.mousePointerView.frame;
-    CGPoint point = CGPointMake(CGRectGetMidX(cursorFrame),
-                                CGRectGetMidY(cursorFrame));
-    UIView *hitView = [self.view hitTest:point withEvent:nil];
-    while (hitView != nil &&
-           hitView != self.view &&
-           !hitView.userInteractionEnabled) {
-        hitView = hitView.superview;
-    }
-    if ([hitView isKindOfClass:[UITextField class]] ||
-        [hitView isKindOfClass:[UITextView class]]) {
-        [CursorManager setCursorType:CursorTypeIBeam];
-        return;
-    }
-    if ([hitView isKindOfClass:[UISlider class]]) {
-        [CursorManager setCursorType:CursorTypeResizeEW];
-        return;
-    }
-    if ([hitView isKindOfClass:[UIScrollView class]]) {
-        [CursorManager setCursorType:CursorTypeResizeNS];
-        return;
-    }
-    if ([hitView isKindOfClass:[UIButton class]] ||
-        [hitView isKindOfClass:[UIControl class]]) {
-        [CursorManager setCursorType:CursorTypeHand];
+    if ([CursorManager currentCursorName] != nil) {
         return;
     }
     [CursorManager setCursorType:CursorTypeNormal];
