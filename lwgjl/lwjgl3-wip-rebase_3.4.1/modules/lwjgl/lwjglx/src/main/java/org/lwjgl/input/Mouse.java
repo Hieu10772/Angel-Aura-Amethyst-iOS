@@ -46,6 +46,7 @@ import org.lwjgl.Sys;
 import org.lwjgl.opengl.Display;
 import org.lwjgl.opengl.InputImplementation;
 import org.lwjgl.glfw.GLFW;
+import org.lwjgl.glfw.CallbackBridge;
 
 
 /**
@@ -202,11 +203,11 @@ public class Mouse {
         }
         currentCursor = cursor;
         if (cursor == null) {
-            org.lwjgl.opengl.CallbackBridge.nativeSetCursorShape(GLFW.GLFW_ARROW_CURSOR);
+            CallbackBridge.nativeSetCursorShape(GLFW.GLFW_ARROW_CURSOR);
         } else if (cursor.isEmpty()) {
-            org.lwjgl.opengl.CallbackBridge.nativeSetCursorShape(GLFW.GLFW_ARROW_CURSOR);
+            CallbackBridge.nativeSetCursorShape(GLFW.GLFW_ARROW_CURSOR);
         } else {
-            org.lwjgl.opengl.CallbackBridge.nativeSetCursorShape(GLFW.GLFW_POINTING_HAND_CURSOR);
+            CallbackBridge.nativeSetCursorShape(GLFW.GLFW_POINTING_HAND_CURSOR);
         }
         return currentCursor;
     }
