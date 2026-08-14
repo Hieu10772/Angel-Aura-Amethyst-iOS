@@ -1339,12 +1339,22 @@ static NSTimer* staleTouchSweepTimer = nil;
     if ([hitView isKindOfClass:[UITextField class]] ||
         [hitView isKindOfClass:[UITextView class]]) {
         [CursorManager setCursorType:CursorTypeIBeam];
-    } else if ([hitView isKindOfClass:[UIButton class]] ||
-               [hitView isKindOfClass:[UIControl class]]) {
-        [CursorManager setCursorType:CursorTypeHand];
-    } else {
-        [CursorManager setCursorType:CursorTypeNormal];
+        return;
     }
+    if ([hitView isKindOfClass:[UISlider class]]) {
+        [CursorManager setCursorType:CursorTypeResizeEW];
+        return;
+    }
+    if ([hitView isKindOfClass:[UIScrollView class]]) {
+        [CursorManager setCursorType:CursorTypeResizeNS];
+        return;
+    }
+    if ([hitView isKindOfClass:[UIButton class]] ||
+        [hitView isKindOfClass:[UIControl class]]) {
+        [CursorManager setCursorType:CursorTypeHand];
+        return;
+    }
+    [CursorManager setCursorType:CursorTypeNormal];
 }
 
 @end
