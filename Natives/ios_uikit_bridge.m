@@ -14,6 +14,40 @@
 #include "ios_uikit_bridge.h"
 #include "utils.h"
 
+#include <GLFW/glfw3.h>
+#import "CursorManager.h"
+#import "CursorType.h"
+
+int currentGLFWCursorShape = GLFW_ARROW_CURSOR;
+
+void CallbackBridge_nativeSetCursorShape(int shape) {
+    currentGLFWCursorShape = shape;
+
+    dispatch_async(dispatch_get_main_queue(), ^{
+        switch (shape) {
+            case GLFW_IBEAM_CURSOR:
+                [CursorManager setCursorType:CursorTypeIBeam];
+                break;
+
+            case GLFW_POINTING_HAND_CURSOR:
+                [CursorManager setCursorType:CursorTypeHand];
+                break;
+
+            case GLFW_RESIZE_EW_CURSOR:
+                [CursorManager setCursorType:CursorTypeResizeEW];
+                break;
+
+            case GLFW_RESIZE_NS_CURSOR:
+                [CursorManager setCursorType:CursorTypeResizeNS];
+                break;
+
+            default:
+                [CursorManager setCursorType:CursorTypeNormal];
+                break;
+        }
+    });
+}
+
 void internal_showDialog(NSString* title, NSString* message) {
     NSLog(@"[UI] Dialog shown: %@: %@", title, message);
 
