@@ -45,6 +45,7 @@ import org.lwjgl.LWJGLUtil;
 import org.lwjgl.Sys;
 import org.lwjgl.opengl.Display;
 import org.lwjgl.opengl.InputImplementation;
+import org.lwjgl.glfw.GLFW;
 
 
 /**
@@ -191,16 +192,22 @@ public class Mouse {
      * @throws LWJGLException if the cursor could not be set for any reason
      */
     public static Cursor setNativeCursor(Cursor cursor) throws LWJGLException {
-        //dummy
-        if(cursor == null && currentCursor.isEmpty()) {
+        if (cursor == null && currentCursor != null && currentCursor.isEmpty()) {
             Mouse.setGrabbed(false);
-            if(grabListener != null) grabListener.onGrab(false);
+            if (grabListener != null) grabListener.onGrab(false);
         }
-        if(cursor != null && cursor.isEmpty()) {
+        if (cursor != null && cursor.isEmpty()) {
             Mouse.setGrabbed(true);
-            if(grabListener != null) grabListener.onGrab(true);
+            if (grabListener != null) grabListener.onGrab(true);
         }
         currentCursor = cursor;
+        if (cursor == null) {
+            org.lwjgl.opengl.CallbackBridge.nativeSetCursorShape(GLFW.GLFW_ARROW_CURSOR);
+        } else if (cursor.isEmpty()) {
+            org.lwjgl.opengl.CallbackBridge.nativeSetCursorShape(GLFW.GLFW_ARROW_CURSOR);
+        } else {
+            org.lwjgl.opengl.CallbackBridge.nativeSetCursorShape(GLFW.GLFW_POINTING_HAND_CURSOR);
+        }
         return currentCursor;
     }
 
