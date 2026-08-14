@@ -65,7 +65,7 @@
             @{@"type": @"navigate", @"label": localize(@"Resize(ew) Cursors", nil), @"vc": @"CursorManageViewController"},
             @{@"type": @"navigate", @"label": localize(@"Resize(ns) Cursors", nil), @"vc": @"CursorManageViewController"},
 
-            @{@"type": @"navigate", @"label": localize(@"Edit Controls Layout", nil), @"vc": @"CustomControlsViewController"},
+            @{@"type": @"navigate", @"label": localize(@"Edit Controls Layout", nil), @"vc": @"CustomControlsViewController"}
         ]},
         @{@"title": localize(@"Game", nil), @"items": @[
             @{@"type": @"picker", @"label": localize(@"LWJGL Version", nil), @"key": @"java.lwjgl_version", @"options": lwjglItems, @"default": @"(auto)"},
