@@ -176,10 +176,13 @@
 #pragma mark - TableView
 
 - (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView {
-    return 1;
+    return 2;
 }
 
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
+    if (section == 0) {
+        return 5;
+    }
     return _cursorNames.count;
 }
 
@@ -187,7 +190,42 @@
     return 72;
 }
 
+- (NSString *)tableView:(UITableView *)tableView titleForHeaderInSection:(NSInteger)section {
+    if (section == 0) {
+        return @"Cursor Types";
+    }
+    return @"Installed Cursors";
+}
+
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
+if (indexPath.section == 0) {
+    cell.accessoryView = nil;
+    cell.detailTextLabel.textColor = ThemeManager.shared.secondaryTextColor;
+    switch (indexPath.row) {
+        case 0:
+            cell.textLabel.text = @"Hand Cursor";
+            cell.detailTextLabel.text = CursorManager.handCursorName;
+            break;
+        case 1:
+            cell.textLabel.text = @"IBeam Cursor";
+            cell.detailTextLabel.text = CursorManager.ibeamCursorName;
+            break;
+        case 2:
+            cell.textLabel.text = @"Resize(EW) Cursor";
+            cell.detailTextLabel.text = CursorManager.resizeEWCursorName;
+            break;
+        case 3:
+            cell.textLabel.text = @"Resize(NS) Cursor";
+            cell.detailTextLabel.text = CursorManager.resizeNSCursorName;
+            break;
+        case 4:
+            cell.textLabel.text = @"Normal Cursor";
+            cell.detailTextLabel.text = CursorManager.normalCursorName;
+            break;
+    }
+    cell.textLabel.textColor = ThemeManager.shared.primaryTextColor;
+    return cell;
+}
     UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:@"CursorCell"];
     if (!cell) {
         cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleSubtitle reuseIdentifier:@"CursorCell"];
@@ -229,8 +267,30 @@
 
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
     [tableView deselectRowAtIndexPath:indexPath animated:YES];
-    NSString *name = _cursorNames[indexPath.row];
     [HapticManager.shared play:HapticTypeLight];
+    if (indexPath.section == 0) {
+        NSString *current = [CursorManager currentCursorName];
+        switch (indexPath.row) {
+            case 0:
+                [CursorManager setHandCursorName:current];
+                break;
+            case 1:
+                [CursorManager setIBeamCursorName:current];
+                break;
+            case 2:
+                [CursorManager setResizeEWCursorName:current];
+                break;
+            case 3:
+                [CursorManager setResizeNSCursorName:current];
+                break;
+            case 4:
+                [CursorManager setNormalCursorName:current];
+                break;
+        }
+        [tableView reloadData];
+        return;
+    }
+    NSString *name = _cursorNames[indexPath.row];
     [CursorManager setCurrentCursorName:name];
     [tableView reloadData];
 }
