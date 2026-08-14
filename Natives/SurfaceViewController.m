@@ -25,6 +25,7 @@
 #import "touchcontroller_jni_bridge.h"
 #import "touchcontroller_launcher.h"
 #import "CursorManager.h"
+#import "CursorType.h"
 
 #include "glfw_keycodes.h"
 #include "utils.h"
@@ -231,9 +232,10 @@ static GameSurfaceView* pojavWindow;
     self.mousePointerView = [[UIImageView alloc] initWithFrame:virtualMouseFrame];
     self.mousePointerView.autoresizingMask = UIViewAutoresizingFlexibleLeftMargin | UIViewAutoresizingFlexibleTopMargin | UIViewAutoresizingFlexibleRightMargin |UIViewAutoresizingFlexibleBottomMargin;
     self.mousePointerView.hidden = !virtualMouseEnabled;
-    self.mousePointerView.image = [CursorManager imageForCursor:[CursorManager currentCursorName]];
     self.mousePointerView.userInteractionEnabled = NO;
     [self.touchView addSubview:self.mousePointerView];
+    [self updateCursorForCurrentPosition];
+    self.mousePointerView.image = [CursorManager imageForCursor:[CursorManager currentCursorName]];
     self.mousePointerView.frame = [CursorManager displayFrameForMouseFrame:virtualMouseFrame];
 
     // Keep the tracked field inside the visible bounds: iOS attaches the
@@ -669,21 +671,25 @@ static GameSurfaceView* pojavWindow;
     if (!isGrabbing) {
         screenScale *= resolutionScale;
         if (virtualMouseEnabled) {
-            if (event == ACTION_MOVE) {
-                virtualMouseFrame.origin.x += (location.x - lastVirtualMousePoint.x) * self.mouseSpeed;
-                virtualMouseFrame.origin.y += (location.y - lastVirtualMousePoint.y) * self.mouseSpeed;
-            } else if (event == ACTION_MOVE_MOTION) {
-                event = ACTION_MOVE;
-                virtualMouseFrame.origin.x += location.x * self.mouseSpeed;
-                virtualMouseFrame.origin.y += location.y * self.mouseSpeed;
-            }
-            virtualMouseFrame.origin.x = clamp(virtualMouseFrame.origin.x, 0, self.surfaceView.frame.size.width);
-            virtualMouseFrame.origin.y = clamp(virtualMouseFrame.origin.y, 0, self.surfaceView.frame.size.height);
-            lastVirtualMousePoint = location;
-            self.mousePointerView.frame = [CursorManager displayFrameForMouseFrame:virtualMouseFrame];
-            CallbackBridge_nativeSendCursorPos(event, virtualMouseFrame.origin.x * screenScale, virtualMouseFrame.origin.y * screenScale);
-            return;
-        }
+           if (event == ACTION_MOVE) {
+               virtualMouseFrame.origin.x += (location.x - lastVirtualMousePoint.x) * self.mouseSpeed;
+               virtualMouseFrame.origin.y += (location.y - lastVirtualMousePoint.y) * self.mouseSpeed;
+           } else if (event == ACTION_MOVE_MOTION) {
+               event = ACTION_MOVE;
+               virtualMouseFrame.origin.x += location.x * self.mouseSpeed;
+               virtualMouseFrame.origin.y += location.y * self.mouseSpeed;
+           }
+           virtualMouseFrame.origin.x = clamp(virtualMouseFrame.origin.x, 0, self.surfaceView.frame.size.width);
+           virtualMouseFrame.origin.y = clamp(virtualMouseFrame.origin.y, 0, self.surfaceView.frame.size.height);
+           lastVirtualMousePoint = location;
+           [self updateCursorForCurrentPosition];
+           self.mousePointerView.image = [CursorManager imageForCursor:[CursorManager currentCursorName]];
+           self.mousePointerView.frame = [CursorManager displayFrameForMouseFrame:virtualMouseFrame];
+           CallbackBridge_nativeSendCursorPos(event,
+               virtualMouseFrame.origin.x * screenScale,
+               virtualMouseFrame.origin.y * screenScale);
+           return;
+       }
         lastVirtualMousePoint = location;
     }
     CallbackBridge_nativeSendCursorPos(event, location.x * screenScale, location.y * screenScale);
@@ -1315,6 +1321,26 @@ static NSTimer* staleTouchSweepTimer = nil;
 
 + (GameSurfaceView *)surface {
     return pojavWindow;
+}
+
+- (void)updateCursorForCurrentPosition {
+    if (!virtualMouseEnabled) return;
+
+    CGPoint point = virtualMouseFrame.origin;
+
+    UIView *hitView = [self.view hitTest:point withEvent:nil];
+
+    if ([hitView isKindOfClass:[UITextField class]] ||
+        [hitView isKindOfClass:[UITextView class]]) {
+        [CursorManager setCursorType:CursorTypeIBeam];
+    }
+    else if ([hitView isKindOfClass:[UIButton class]] ||
+             [hitView isKindOfClass:[UIControl class]]) {
+        [CursorManager setCursorType:CursorTypeHand];
+    }
+    else {
+        [CursorManager setCursorType:CursorTypeNormal];
+    }
 }
 
 @end
