@@ -15,32 +15,31 @@
 #include "utils.h"
 
 #include <GLFW/glfw3.h>
+#include "glfw_keycodes.h"
 #import "CursorManager.h"
 #import "CursorType.h"
 
 int currentGLFWCursorShape = GLFW_ARROW_CURSOR;
 
-void CallbackBridge_nativeSetCursorShape(int shape) {
+JNIEXPORT void JNICALL
+Java_org_lwjgl_glfw_CallbackBridge_nativeSetCursorShape
+(JNIEnv *env, jclass clazz, jint shape)
+{
     currentGLFWCursorShape = shape;
-
     dispatch_async(dispatch_get_main_queue(), ^{
         switch (shape) {
             case GLFW_IBEAM_CURSOR:
                 [CursorManager setCursorType:CursorTypeIBeam];
                 break;
-
             case GLFW_POINTING_HAND_CURSOR:
                 [CursorManager setCursorType:CursorTypeHand];
                 break;
-
             case GLFW_RESIZE_EW_CURSOR:
                 [CursorManager setCursorType:CursorTypeResizeEW];
                 break;
-
             case GLFW_RESIZE_NS_CURSOR:
                 [CursorManager setCursorType:CursorTypeResizeNS];
                 break;
-
             default:
                 [CursorManager setCursorType:CursorTypeNormal];
                 break;
