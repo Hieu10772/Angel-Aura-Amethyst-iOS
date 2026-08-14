@@ -1,9 +1,14 @@
 #pragma once
 #import <UIKit/UIKit.h>
 #include "jni.h"
+#include <GLFW/glfw3.h>
 
 #define CLIPBOARD_COPY 2000
 #define CLIPBOARD_PASTE 2001
+
+extern int currentGLFWCursorShape;
+
+void CallbackBridge_nativeSetCursorShape(int shape);
 
 UIViewController* tmpRootVC;
 
