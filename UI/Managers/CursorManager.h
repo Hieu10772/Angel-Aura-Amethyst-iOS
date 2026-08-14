@@ -45,10 +45,6 @@ NS_ASSUME_NONNULL_BEGIN
 /// Ngược lại của displayFrameForMouseFrame.
 + (CGRect)mouseFrameForDisplayFrame:(CGRect)displayFrame;
 
-@end
-
-NS_ASSUME_NONNULL_END
-
 #import "CursorType.h"
 
 + (NSString *)normalCursorName;
@@ -64,3 +60,7 @@ NS_ASSUME_NONNULL_END
 + (void)setResizeNSCursorName:(NSString *)name;
 
 + (void)setCursorType:(CursorType)type;
+
+@end
+
+NS_ASSUME_NONNULL_END
