@@ -58,7 +58,13 @@
             @{@"type": @"switch", @"label": localize(@"preference.title.recording_hide", nil), @"key": @"control.recording_hide"},
             @{@"type": @"switch", @"label": localize(@"preference.title.disable_haptics", nil), @"key": @"control.disable_haptics"},
             @{@"type": @"slider", @"label": localize(@"preference.title.press_duration", nil), @"key": @"control.press_duration", @"min": @100, @"max": @1000, @"suffix": @"ms"},
+
             @{@"type": @"navigate", @"label": localize(@"Mouse Cursors", nil), @"vc": @"CursorManageViewController"},
+            @{@"type": @"navigate", @"label": localize(@"Hand Cursors", nil), @"vc": @"CursorManageViewController"},
+            @{@"type": @"navigate", @"label": localize(@"Ibeam Cursors", nil), @"vc": @"CursorManageViewController"},
+            @{@"type": @"navigate", @"label": localize(@"Resize(ew) Cursors", nil), @"vc": @"CursorManageViewController"},
+            @{@"type": @"navigate", @"label": localize(@"Resize(ns) Cursors", nil), @"vc": @"CursorManageViewController"},
+
             @{@"type": @"navigate", @"label": localize(@"Edit Controls Layout", nil), @"vc": @"CustomControlsViewController"},
         ]},
         @{@"title": localize(@"Game", nil), @"items": @[
