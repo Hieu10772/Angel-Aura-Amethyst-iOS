@@ -1327,10 +1327,12 @@ static NSTimer* staleTouchSweepTimer = nil;
     if (!virtualMouseEnabled || isGrabbing) {
         return;
     }
-    if ([CursorManager currentCursorName] != nil) {
-        return;
+
+    if (currentGLFWCursorShape == GLFW_ARROW_CURSOR) {
+        [CursorManager setCursorType:CursorTypeNormal];
     }
-    [CursorManager setCursorType:CursorTypeNormal];
+    self.mousePointerView.frame =
+        [CursorManager displayFrameForMouseFrame:virtualMouseFrame];
 }
 
 @end
