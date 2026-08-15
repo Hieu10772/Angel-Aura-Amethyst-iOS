@@ -197,18 +197,11 @@ public class Mouse {
             Mouse.setGrabbed(false);
             if (grabListener != null) grabListener.onGrab(false);
         }
-        if (cursor != null && cursor.isEmpty()) {
+            if (cursor != null && cursor.isEmpty()) {
             Mouse.setGrabbed(true);
             if (grabListener != null) grabListener.onGrab(true);
         }
         currentCursor = cursor;
-        if (cursor == null) {
-            CallbackBridge.nativeSetCursorShape(GLFW.GLFW_ARROW_CURSOR);
-        } else if (cursor.isEmpty()) {
-            CallbackBridge.nativeSetCursorShape(GLFW.GLFW_ARROW_CURSOR);
-        } else {
-            CallbackBridge.nativeSetCursorShape(GLFW.GLFW_POINTING_HAND_CURSOR);
-        }
         return currentCursor;
     }
 
