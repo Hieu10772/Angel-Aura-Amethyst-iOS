@@ -393,34 +393,36 @@
     </target>
 
     <macrodef name="compileBinding">
-        <attribute name="binding"/>
-        <element name="body" implicit="yes" optional="yes"/>
-        <sequential>
-            <!-- cleanup in case there was an earlier "release" failure -->
-            <delete dir="${module.lwjgl}/@{binding}/src/generated/java/META-INF" quiet="true"/>
+    <attribute name="binding"/>
+    <element name="body" implicit="yes" optional="yes"/>
+    <sequential>
+        <!-- cleanup in case there was an earlier "release" failure -->
+        <delete dir="${module.lwjgl}/@{binding}/src/generated/java/META-INF" quiet="true"/>
 
-            <local name="hasMain"/>
-            <available file="${module.lwjgl}/@{binding}/src/main/java" type="dir" property="hasMain"/>
-            <local name="hasGenerated"/>
-            <available file="${module.lwjgl}/@{binding}/src/generated/java" type="dir" property="hasGenerated"/>
+        <local name="hasMain"/>
+        <available file="${module.lwjgl}/@{binding}/src/main/java" type="dir" property="hasMain"/>
+        <local name="hasGenerated"/>
+        <available file="${module.lwjgl}/@{binding}/src/generated/java" type="dir" property="hasGenerated"/>
 
-            <mkdir dir="${bin.lwjgl}/@{binding}"/>
-            <lwjgl.javac destdir="${bin.lwjgl}/@{binding}" taskname="javac: @{binding}" if:true="${binding.@{binding}}">
-                <classpath>
-                    <pathelement path="${bin.lwjgl}/core"/>
-                    <pathelement path="${lib}/java/jspecify.jar"/>
-                </classpath>
+        <mkdir dir="${bin.lwjgl}/@{binding}"/>
+        <lwjgl.javac destdir="${bin.lwjgl}/@{binding}" taskname="javac: @{binding}" if:true="${binding.@{binding}}">
+            <classpath>
+                <pathelement path="${bin.lwjgl}/core"/>
+                <pathelement path="${lib}/java/jspecify.jar"/>
 
-                <src>
-                    <pathelement path="${module.lwjgl}/@{binding}/src/main/java" if:set="hasMain"/>
-                    <pathelement path="${module.lwjgl}/@{binding}/src/generated/java" if:set="hasGenerated"/>
-                </src>
-                <include name="**"/>
+                <pathelement path="${basedir}/../amethyst-prebuilt-libraries/misc/lwjgl-classes/jre_lwjgl3glfw/src/main/java"/>
+            </classpath>
 
-                <body/>
-            </lwjgl.javac>
-        </sequential>
-    </macrodef>
+            <src>
+                <pathelement path="${module.lwjgl}/@{binding}/src/main/java" if:set="hasMain"/>
+                <pathelement path="${module.lwjgl}/@{binding}/src/generated/java" if:set="hasGenerated"/>
+            </src>
+            <include name="**"/>
+
+            <body/>
+        </lwjgl.javac>
+    </sequential>
+</macrodef>
 
     <target name="compile" description="Compiles the Java source code" depends="generate">
         <!--
