@@ -1,10 +1,24 @@
 #pragma once
+
 #import <UIKit/UIKit.h>
 #include "jni.h"
-#include <GLFW/glfw3.h>
 
 #define CLIPBOARD_COPY 2000
 #define CLIPBOARD_PASTE 2001
+
+// GLFW standard cursor shape constants.
+// Kept here because the native Amethyst target does not include GLFW's
+// glfw3.h header.
+#define GLFW_ARROW_CURSOR        0x36001
+#define GLFW_IBEAM_CURSOR        0x36002
+#define GLFW_CROSSHAIR_CURSOR    0x36003
+#define GLFW_POINTING_HAND_CURSOR 0x36004
+#define GLFW_RESIZE_EW_CURSOR    0x36005
+#define GLFW_RESIZE_NS_CURSOR    0x36006
+#define GLFW_RESIZE_NWSE_CURSOR  0x36007
+#define GLFW_RESIZE_NESW_CURSOR  0x36008
+#define GLFW_RESIZE_ALL_CURSOR   0x36009
+#define GLFW_NOT_ALLOWED_CURSOR  0x3600A
 
 extern int currentGLFWCursorShape;
 
