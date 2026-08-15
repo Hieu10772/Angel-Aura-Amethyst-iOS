@@ -14,7 +14,6 @@
 #include "ios_uikit_bridge.h"
 #include "utils.h"
 
-#include <GLFW/glfw3.h>
 #include "glfw_keycodes.h"
 #import "CursorManager.h"
 #import "CursorType.h"
