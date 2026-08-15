@@ -30,6 +30,8 @@ import sun.misc.Unsafe;
 
 public class GLFW
 {
+    private static final Map<Long, Integer> amethystCursorShapes = new HashMap<>();
+    private static long amethystNextCursorHandle = 1L;
     static FloatBuffer joystickData = (FloatBuffer)FloatBuffer.allocate(8).flip();
     static ByteBuffer buttonData = (ByteBuffer)ByteBuffer.allocate(8).flip();
     /** The major version number of the GLFW library. This is incremented when the API is changed in non-compatible ways. */
@@ -1213,13 +1215,40 @@ public class GLFW
     }*/
 
     public static long glfwCreateCursor(@NativeType("const GLFWimage *") GLFWImage image, int xhot, int yhot) {
-        return 4L;
+        long handle = amethystNextCursorHandle++;
+        amethystCursorShapes.put(handle, GLFW_ARROW_CURSOR);
+        return handle;
     }
+
     public static long glfwCreateStandardCursor(int shape) {
-        return 4L;
+        long handle = amethystNextCursorHandle++;
+        amethystCursorShapes.put(handle, shape);
+        return handle;
     }
-    public static void glfwDestroyCursor(@NativeType("GLFWcursor *") long cursor) {}
-    public static void glfwSetCursor(@NativeType("GLFWwindow *") long window, @NativeType("GLFWcursor *") long cursor) {}
+
+    public static void glfwDestroyCursor(@NativeType("GLFWcursor *") long cursor) {
+        if (cursor != 0L) {
+            amethystCursorShapes.remove(cursor);
+        }
+    }
+
+    public static void glfwSetCursor(
+        @NativeType("GLFWwindow *") long window,
+        @NativeType("GLFWcursor *") long cursor
+    ) {
+        if (cursor == 0L) {
+            CallbackBridge.nativeSetCursorShape(GLFW_ARROW_CURSOR);
+            return;
+        }
+
+        Integer shape = amethystCursorShapes.get(cursor);
+
+        if (shape != null) {
+            CallbackBridge.nativeSetCursorShape(shape);
+        } else {
+            CallbackBridge.nativeSetCursorShape(GLFW_ARROW_CURSOR);
+        }
+    }
 
     public static boolean glfwRawMouseMotionSupported() {
         // Should be not supported?
