@@ -197,7 +197,7 @@ public class Mouse {
             Mouse.setGrabbed(false);
             if (grabListener != null) grabListener.onGrab(false);
         }
-            if (cursor != null && cursor.isEmpty()) {
+        if (cursor != null && cursor.isEmpty()) {
             Mouse.setGrabbed(true);
             if (grabListener != null) grabListener.onGrab(true);
         }
