@@ -576,12 +576,13 @@
         </compileBinding>
 
         <compileBinding binding="lwjglx">
-            <classpath>
-                <pathelement path="${bin.lwjgl}/glfw"/>
-                <pathelement path="${bin.lwjgl}/openal"/>
-                <pathelement path="${bin.lwjgl}/opengl"/>
-            </classpath>
-        </compileBinding>
+    <classpath>
+        <pathelement path="${bin.lwjgl}/glfw"/>
+        <pathelement path="${bin.lwjgl}/openal"/>
+        <pathelement path="${bin.lwjgl}/opengl"/>
+        <pathelement path="${basedir}/../amethyst-prebuilt-libraries/misc/lwjgl-classes/jre_lwjgl3glfw/src/main/java"/>
+    </classpath>
+</compileBinding>
 
         <compileBinding binding="ktx">
             <classpath>
