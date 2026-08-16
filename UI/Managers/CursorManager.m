@@ -2,6 +2,7 @@
 #import "LauncherPreferences.h"
 #import <ImageIO/ImageIO.h>
 #import <string.h>
+#import <stdlib.h>
 
 static NSString * const kNormalCursorKey   = @"normal_cursor";
 static NSString * const kHandCursorKey     = @"hand_cursor";
@@ -21,12 +22,41 @@ static NSString *const kImageGifName = @"image.gif";
 @implementation CursorManager
 
 + (NSString *)cursorsDirectory {
-    NSString *documents = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES).firstObject;
-    NSString *path = [documents stringByAppendingPathComponent:kCursorsDirName];
-    NSFileManager *fm = NSFileManager.defaultManager;
-    if (![fm fileExistsAtPath:path]) {
-        [fm createDirectoryAtPath:path withIntermediateDirectories:YES attributes:nil error:nil];
+    const char *gameDir = getenv("POJAV_GAME_DIR");
+
+    if (!gameDir || gameDir[0] == '\0') {
+        NSLog(@"[CursorManager] ERROR: POJAV_GAME_DIR is not set");
+        return nil;
     }
+
+    NSString *gamePath = [NSString stringWithUTF8String:gameDir];
+    NSString *path = [gamePath stringByAppendingPathComponent:kCursorsDirName];
+
+    NSFileManager *fm = NSFileManager.defaultManager;
+
+    BOOL isDirectory = NO;
+
+    if (![fm fileExistsAtPath:path isDirectory:&isDirectory]) {
+        NSError *error = nil;
+
+        BOOL created = [fm createDirectoryAtPath:path
+                     withIntermediateDirectories:YES
+                                      attributes:nil
+                                           error:&error];
+
+        if (!created) {
+            NSLog(@"[CursorManager] Failed to create cursors directory: %@",
+                  error.localizedDescription);
+            return nil;
+        }
+    } else if (!isDirectory) {
+        NSLog(@"[CursorManager] ERROR: cursor path exists but is not a directory: %@",
+              path);
+        return nil;
+    }
+
+    NSLog(@"[CursorManager] Cursors directory: %@", path);
+
     return path;
 }
 
@@ -39,7 +69,13 @@ static NSString *const kImageGifName = @"image.gif";
 }
 
 + (NSString *)cursorPathForName:(NSString *)name {
-    return [self.cursorsDirectory stringByAppendingPathComponent:name];
+    NSString *directory = [self cursorsDirectory];
+
+    if (!directory || !name || name.length == 0) {
+        return nil;
+    }
+
+    return [directory stringByAppendingPathComponent:name];
 }
 
 + (NSArray<NSString *> *)cursorNames {
@@ -90,23 +126,50 @@ static NSString *const kImageGifName = @"image.gif";
 
     NSString *dir = [self cursorPathForName:name];
 
+    if (!dir) {
+        NSLog(@"[CursorManager] setCursor: invalid directory");
+        return;
+    }
+
     NSFileManager *fm = NSFileManager.defaultManager;
 
     if (![fm fileExistsAtPath:dir]) {
-        [fm createDirectoryAtPath:dir
-       withIntermediateDirectories:YES
-                        attributes:nil
-                             error:nil];
+        NSError *createError = nil;
+
+        BOOL created =
+            [fm createDirectoryAtPath:dir
+          withIntermediateDirectories:YES
+                           attributes:nil
+                                error:&createError];
+
+        if (!created) {
+            NSLog(@"[CursorManager] Failed to create cursor directory %@: %@",
+                  dir,
+                  createError.localizedDescription);
+            return;
+        }
     }
 
     NSString *path = [dir stringByAppendingPathComponent:kCursorTypeFileName];
 
     NSString *value = [NSString stringWithFormat:@"%ld", (long)type];
 
-    [value writeToFile:path
-            atomically:YES
-              encoding:NSUTF8StringEncoding
-                 error:nil];
+    NSError *writeError = nil;
+
+    BOOL written =
+        [value writeToFile:path
+                atomically:YES
+                  encoding:NSUTF8StringEncoding
+                     error:&writeError];
+
+    if (!written) {
+        NSLog(@"[CursorManager] Failed to write cursor type: %@",
+              writeError.localizedDescription);
+    } else {
+        NSLog(@"[CursorManager] Cursor type saved: %@ -> %ld",
+              path,
+              (long)type);
+    }
 }
 
 + (NSArray<NSString *> *)cursorNamesForType:(CursorType)type {
@@ -212,14 +275,57 @@ static NSString *const kImageGifName = @"image.gif";
     return [UIImage imageNamed:@"MousePointer"];
 }
 
-+ (void)saveImageData:(NSData *)data isGIF:(BOOL)isGIF forCursor:(NSString *)name {
-    NSFileManager *fm = NSFileManager.defaultManager;
-    NSString *dir = [self cursorPathForName:name];
-    if (![fm fileExistsAtPath:dir]) {
-        [fm createDirectoryAtPath:dir withIntermediateDirectories:YES attributes:nil error:nil];
++ (void)saveImageData:(NSData *)data
+               isGIF:(BOOL)isGIF
+            forCursor:(NSString *)name {
+
+    if (!data || data.length == 0) {
+        NSLog(@"[CursorManager] saveImageData: empty data");
+        return;
     }
+
+    NSString *dir = [self cursorPathForName:name];
+
+    if (!dir) {
+        NSLog(@"[CursorManager] saveImageData: invalid directory");
+        return;
+    }
+
+    NSFileManager *fm = NSFileManager.defaultManager;
+
+    if (![fm fileExistsAtPath:dir]) {
+        NSError *error = nil;
+
+        BOOL created =
+            [fm createDirectoryAtPath:dir
+          withIntermediateDirectories:YES
+                           attributes:nil
+                                error:&error];
+
+        if (!created) {
+            NSLog(@"[CursorManager] Failed to create %@: %@",
+                  dir,
+                  error.localizedDescription);
+            return;
+        }
+    }
+
     NSString *fileName = isGIF ? kImageGifName : kImagePngName;
-    [data writeToFile:[dir stringByAppendingPathComponent:fileName] atomically:YES];
+    NSString *path = [dir stringByAppendingPathComponent:fileName];
+
+    NSError *error = nil;
+
+    BOOL written = [data writeToFile:path
+                             options:NSDataWritingAtomic
+                               error:&error];
+
+    if (!written) {
+        NSLog(@"[CursorManager] Failed to save image %@: %@",
+              path,
+              error.localizedDescription);
+    } else {
+        NSLog(@"[CursorManager] Cursor image saved: %@", path);
+    }
 }
 
 #pragma mark - Hitbox
