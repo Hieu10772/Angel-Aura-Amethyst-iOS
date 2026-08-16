@@ -117,7 +117,7 @@
 }
 
 - (void)reloadCursors {
-    _cursorNames = [CursorManager cursorNames];
+    _cursorNames = [CursorManager cursorNamesForType:(CursorType)self.cursorType];
     [_tableView reloadData];
 }
 
@@ -205,7 +205,10 @@
     BOOL access = [url startAccessingSecurityScopedResource];
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
         NSError *error = nil;
-        NSString *cursor = [CursorManager importCursorFromURL:url withName:name error:&error];
+        NSString *cursor = [CursorManager importCursorFromURL:url
+                                             withName:name
+                                                 type:(CursorType)self.cursorType
+                                                error:&error];
         if (access) [url stopAccessingSecurityScopedResource];
         dispatch_async(dispatch_get_main_queue(), ^{
             self.isImporting = YES;
@@ -216,7 +219,10 @@
 
 - (void)finishImportImage:(UIImage *)image name:(NSString *)name {
     NSError *error = nil;
-    NSString *cursor = [CursorManager importCursorFromImage:image withName:name error:&error];
+    NSString *cursor = [CursorManager importCursorFromImage:image
+                                               withName:name
+                                                  type:(CursorType)self.cursorType
+                                                 error:&error];
     [self handleImportResult:cursor error:error];
 }
 
