@@ -6,6 +6,7 @@
 #import "ios_uikit_bridge.h"
 #import "CurseForgeService.h"
 #import "CustomControlsViewController.h"
+#import "CursorManageViewController.h"
 #import <PhotosUI/PhotosUI.h>
 #import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 
