@@ -239,8 +239,7 @@
         NSError *error = nil;
         NSString *cursor = [CursorManager importCursorFromURL:url
                                              withName:name
-                                                 type:(CursorType)self.cursorType
-                                                error:&error];
+                                               error:&error];
         if (access) [url stopAccessingSecurityScopedResource];
         dispatch_async(dispatch_get_main_queue(), ^{
             self.isImporting = YES;
@@ -253,7 +252,6 @@
     NSError *error = nil;
     NSString *cursor = [CursorManager importCursorFromImage:image
                                                withName:name
-                                                  type:(CursorType)self.cursorType
                                                  error:&error];
     [self handleImportResult:cursor error:error];
 }
@@ -264,7 +262,6 @@
         showDialog(@"Import Failed", error ? error.localizedDescription : @"Unsupported image format");
         return;
     }
-    [self setSelectedCursorName:cursor];
     [self reloadCursors];
     [self openHitboxEditorForCursor:cursor];
 }
