@@ -309,11 +309,6 @@
 
     [tableView reloadData];
 }
-    }
-    NSString *name = _cursorNames[indexPath.row];
-    [CursorManager setCurrentCursorName:name];
-    [tableView reloadData];
-}
 
 - (UISwipeActionsConfiguration *)tableView:(UITableView *)tableView trailingSwipeActionsConfigurationForRowAtIndexPath:(NSIndexPath *)indexPath {
     NSString *name = _cursorNames[indexPath.row];
