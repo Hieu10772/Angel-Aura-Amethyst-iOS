@@ -19,10 +19,77 @@
 
 @implementation CursorManageViewController
 
+#pragma mark - Cursor Type
+
+- (NSString *)cursorTypeTitle {
+    switch (self.cursorType) {
+        case CursorManageTypeHand:
+            return @"Hand Cursor";
+
+        case CursorManageTypeIBeam:
+            return @"IBeam Cursor";
+
+        case CursorManageTypeResizeEW:
+            return @"Resize(EW) Cursor";
+
+        case CursorManageTypeResizeNS:
+            return @"Resize(NS) Cursor";
+
+        case CursorManageTypeNormal:
+        default:
+            return @"Mouse Cursor";
+    }
+}
+
+- (NSString *)selectedCursorName {
+    switch (self.cursorType) {
+        case CursorManageTypeHand:
+            return CursorManager.handCursorName;
+
+        case CursorManageTypeIBeam:
+            return CursorManager.ibeamCursorName;
+
+        case CursorManageTypeResizeEW:
+            return CursorManager.resizeEWCursorName;
+
+        case CursorManageTypeResizeNS:
+            return CursorManager.resizeNSCursorName;
+
+        case CursorManageTypeNormal:
+        default:
+            return CursorManager.normalCursorName;
+    }
+}
+
+- (void)setSelectedCursorName:(NSString *)name {
+    switch (self.cursorType) {
+        case CursorManageTypeHand:
+            [CursorManager setHandCursorName:name];
+            break;
+
+        case CursorManageTypeIBeam:
+            [CursorManager setIBeamCursorName:name];
+            break;
+
+        case CursorManageTypeResizeEW:
+            [CursorManager setResizeEWCursorName:name];
+            break;
+
+        case CursorManageTypeResizeNS:
+            [CursorManager setResizeNSCursorName:name];
+            break;
+
+        case CursorManageTypeNormal:
+        default:
+            [CursorManager setNormalCursorName:name];
+            break;
+    }
+}
+
 - (void)viewDidLoad {
     [super viewDidLoad];
     self.view.backgroundColor = ThemeManager.shared.contentBackgroundColor;
-    self.navigationItem.title = @"Mouse Cursors";
+    self.navigationItem.title = [self cursorTypeTitle];
 
     _addButton = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemAdd target:self action:@selector(showImportOptions)];
     self.navigationItem.rightBarButtonItem = _addButton;
@@ -159,8 +226,7 @@
         showDialog(@"Import Failed", error ? error.localizedDescription : @"Unsupported image format");
         return;
     }
-    // Auto-select the newly imported cursor
-    [CursorManager setCurrentCursorName:cursor];
+    [self setSelectedCursorName:cursor];
     [self reloadCursors];
     [self openHitboxEditorForCursor:cursor];
 }
@@ -176,13 +242,10 @@
 #pragma mark - TableView
 
 - (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView {
-    return 2;
+    return 1;
 }
 
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
-    if (section == 0) {
-        return 5;
-    }
     return _cursorNames.count;
 }
 
@@ -191,48 +254,10 @@
 }
 
 - (NSString *)tableView:(UITableView *)tableView titleForHeaderInSection:(NSInteger)section {
-    if (section == 0) {
-        return @"Cursor Types";
-    }
     return @"Installed Cursors";
 }
 
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
-    if (indexPath.section == 0) {
-        UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:@"TypeCell"];
-        if (!cell) {
-            cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleValue1
-            reuseIdentifier:@"TypeCell"];
-            cell.backgroundColor = ThemeManager.shared.cardBackgroundColor;
-            cell.textLabel.font = [UIFont systemFontOfSize:15 weight:UIFontWeightSemibold];
-            cell.detailTextLabel.font = [UIFont systemFontOfSize:12];
-        }
-        cell.textLabel.textColor = ThemeManager.shared.primaryTextColor;
-        cell.detailTextLabel.textColor = ThemeManager.shared.secondaryTextColor;
-        switch (indexPath.row) {
-            case 0:
-                cell.textLabel.text = @"Hand Cursor";
-                cell.detailTextLabel.text = CursorManager.handCursorName;
-                break;
-            case 1:
-                cell.textLabel.text = @"IBeam Cursor";
-                cell.detailTextLabel.text = CursorManager.ibeamCursorName;
-                break;
-            case 2:
-                cell.textLabel.text = @"Resize(EW) Cursor";
-                cell.detailTextLabel.text = CursorManager.resizeEWCursorName;
-                break;
-            case 3:
-                cell.textLabel.text = @"Resize(NS) Cursor";
-                cell.detailTextLabel.text = CursorManager.resizeNSCursorName;
-                break;
-            case 4:
-                cell.textLabel.text = @"Normal Cursor";
-                cell.detailTextLabel.text = CursorManager.normalCursorName;
-                break;
-        }
-        return cell;
-    }
     
     UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:@"CursorCell"];
     if (!cell) {
@@ -275,28 +300,15 @@
 
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
     [tableView deselectRowAtIndexPath:indexPath animated:YES];
+
     [HapticManager.shared play:HapticTypeLight];
-    if (indexPath.section == 0) {
-        NSString *current = [CursorManager currentCursorName];
-        switch (indexPath.row) {
-            case 0:
-                [CursorManager setHandCursorName:current];
-                break;
-            case 1:
-                [CursorManager setIBeamCursorName:current];
-                break;
-            case 2:
-                [CursorManager setResizeEWCursorName:current];
-                break;
-            case 3:
-                [CursorManager setResizeNSCursorName:current];
-                break;
-            case 4:
-                [CursorManager setNormalCursorName:current];
-                break;
-        }
-        [tableView reloadData];
-        return;
+
+    NSString *name = _cursorNames[indexPath.row];
+
+    [self setSelectedCursorName:name];
+
+    [tableView reloadData];
+}
     }
     NSString *name = _cursorNames[indexPath.row];
     [CursorManager setCurrentCursorName:name];
