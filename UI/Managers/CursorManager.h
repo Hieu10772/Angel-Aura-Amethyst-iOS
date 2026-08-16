@@ -9,7 +9,14 @@ NS_ASSUME_NONNULL_BEGIN
 + (NSString *)defaultCursorName;
 + (BOOL)isDefaultCursor:(NSString *)name;
 
+/* All cursor names — kept for compatibility */
 + (NSArray<NSString *> *)cursorNames;
+
+/* Cursor names belonging to a specific cursor type */
++ (NSArray<NSString *> *)cursorNamesForType:(CursorType)type;
+
++ (CursorType)cursorTypeForCursor:(NSString *)name;
++ (void)setCursor:(NSString *)name type:(CursorType)type;
 
 + (NSString *)currentCursorName;
 + (void)setCurrentCursorName:(NSString *)name;
@@ -22,17 +29,27 @@ NS_ASSUME_NONNULL_BEGIN
 + (BOOL)deleteCursor:(NSString *)name;
 
 + (nullable NSString *)importCursorFromURL:(NSURL *)url
-                                     withName:(NSString *)name
-                                         error:(NSError **)error;
+                                   withName:(NSString *)name
+                                     error:(NSError **)error;
+
++ (nullable NSString *)importCursorFromURL:(NSURL *)url
+                                   withName:(NSString *)name
+                                      type:(CursorType)type
+                                     error:(NSError **)error;
 
 + (nullable NSString *)importCursorFromImage:(UIImage *)image
-                                       withName:(NSString *)name
-                                           error:(NSError **)error;
+                                     withName:(NSString *)name
+                                       error:(NSError **)error;
+
++ (nullable NSString *)importCursorFromImage:(UIImage *)image
+                                     withName:(NSString *)name
+                                        type:(CursorType)type
+                                       error:(NSError **)error;
 
 + (CGRect)displayFrameForMouseFrame:(CGRect)mouseFrame;
 + (CGRect)mouseFrameForDisplayFrame:(CGRect)displayFrame;
 
-// ===== Cursor types =====
+/* Cursor types */
 + (NSString *)normalCursorName;
 + (NSString *)handCursorName;
 + (NSString *)ibeamCursorName;
