@@ -51,6 +51,14 @@ extern "C" {
 
 #define REALLOC(_ptr, _old_size, _size) os_realloc(_ptr, _old_size, _size)
 
+#ifdef MALLOC_STRUCT
+#undef MALLOC_STRUCT
+#endif
+
+#ifdef CALLOC_STRUCT
+#undef CALLOC_STRUCT
+#endif
+
 #define MALLOC_STRUCT(T)   (struct T *) MALLOC(sizeof(struct T))
 
 #define CALLOC_STRUCT(T)   (struct T *) CALLOC(1, sizeof(struct T))
