@@ -2,9 +2,17 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
-/// Trang quản lý con trỏ chuột: xem danh sách, chọn con trỏ đang dùng,
-/// chỉnh hitbox, xoá con trỏ (trừ con trỏ mặc định), import con trỏ mới.
+typedef NS_ENUM(NSInteger, CursorManageType) {
+    CursorManageTypeNormal,
+    CursorManageTypeHand,
+    CursorManageTypeIBeam,
+    CursorManageTypeResizeEW,
+    CursorManageTypeResizeNS
+};
+
 @interface CursorManageViewController : UIViewController
+
+@property (nonatomic, assign) CursorManageType cursorType;
 
 @end
 
