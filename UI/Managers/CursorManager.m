@@ -13,6 +13,7 @@ static NSString *const kCursorsDirName = @"cursors";
 static NSString *const kDefaultCursorName = @"default";
 static NSString *const kCurrentCursorPrefKey = @"control.virtmouse_cursor";
 static NSString *const kHitboxFileName = @"hitbox.json";
+static NSString *const kCursorTypeFileName = @"type";
 
 static NSString *const kImagePngName = @"image.png";
 static NSString *const kImageGifName = @"image.gif";
@@ -54,6 +55,121 @@ static NSString *const kImageGifName = @"image.gif";
             [names addObject:item];
         }
     }
+    return names;
+}
+
++ (CursorType)cursorTypeForCursor:(NSString *)name {
+    if ([name isEqualToString:kDefaultCursorName]) {
+        return CursorTypeNormal;
+    }
+
+    NSString *path = [[self cursorPathForName:name]
+                      stringByAppendingPathComponent:kCursorTypeFileName];
+
+    NSString *value = [NSString stringWithContentsOfFile:path
+                                               encoding:NSUTF8StringEncoding
+                                                  error:nil];
+
+    NSInteger type = value.integerValue;
+
+    if (type < CursorTypeNormal || type > CursorTypeResizeNS) {
+        return CursorTypeNormal;
+    }
+
+    return (CursorType)type;
+}
+
++ (void)setCursor:(NSString *)name type:(CursorType)type {
+    if (!name || name.length == 0) {
+        return;
+    }
+
+    if ([self isDefaultCursor:name]) {
+        return;
+    }
+
+    NSString *dir = [self cursorPathForName:name];
+
+    NSFileManager *fm = NSFileManager.defaultManager;
+
+    if (![fm fileExistsAtPath:dir]) {
+        [fm createDirectoryAtPath:dir
+       withIntermediateDirectories:YES
+                        attributes:nil
+                             error:nil];
+    }
+
+    NSString *path = [dir stringByAppendingPathComponent:kCursorTypeFileName];
+
+    NSString *value = [NSString stringWithFormat:@"%ld", (long)type];
+
+    [value writeToFile:path
+            atomically:YES
+              encoding:NSUTF8StringEncoding
+                 error:nil];
+}
+
++ (NSArray<NSString *> *)cursorNamesForType:(CursorType)type {
+    NSFileManager *fm = NSFileManager.defaultManager;
+
+    NSArray *content =
+        [fm contentsOfDirectoryAtPath:self.cursorsDirectory error:nil];
+
+    NSMutableArray<NSString *> *names = [NSMutableArray array];
+
+    /*
+     * Built-in cursors.
+     * They belong to their corresponding cursor type.
+     */
+    switch (type) {
+        case CursorTypeNormal:
+            [names addObject:kDefaultCursorName];
+            break;
+
+        case CursorTypeHand:
+            [names addObject:@"hand"];
+            break;
+
+        case CursorTypeIBeam:
+            [names addObject:@"text"];
+            break;
+
+        case CursorTypeResizeEW:
+            [names addObject:@"resize_ew"];
+            break;
+
+        case CursorTypeResizeNS:
+            [names addObject:@"resize_ns"];
+            break;
+    }
+
+    for (NSString *item in content) {
+        if ([item hasPrefix:@"."]) {
+            continue;
+        }
+
+        if ([item isEqualToString:kDefaultCursorName] ||
+            [item isEqualToString:@"hand"] ||
+            [item isEqualToString:@"text"] ||
+            [item isEqualToString:@"resize_ew"] ||
+            [item isEqualToString:@"resize_ns"]) {
+            continue;
+        }
+
+        NSString *full =
+            [self.cursorsDirectory stringByAppendingPathComponent:item];
+
+        BOOL isDir = NO;
+
+        if (![fm fileExistsAtPath:full isDirectory:&isDir] || !isDir) {
+            continue;
+        }
+
+        if ([self cursorTypeForCursor:item] == type) {
+            [names addObject:item];
+        }
+    }
+
     return names;
 }
 
@@ -164,19 +280,44 @@ static NSString *const kImageGifName = @"image.gif";
     return candidate;
 }
 
-+ (NSString *)importCursorFromURL:(NSURL *)url withName:(NSString *)name error:(NSError **)error {
-    NSData *data = [NSData dataWithContentsOfURL:url options:0 error:error];
-    if (!data) return nil;
-    return [self importCursorFromData:data withName:name error:error];
-}
++ (NSString *)importCursorFromURL:(NSURL *)url
+                         withName:(NSString *)name
+                             type:(CursorType)type
+                            error:(NSError **)error {
+    NSData *data = [NSData dataWithContentsOfURL:url
+                                         options:0
+                                           error:error];
 
-+ (NSString *)importCursorFromImage:(UIImage *)image withName:(NSString *)name error:(NSError **)error {
-    NSData *png = UIImagePNGRepresentation(image);
-    if (!png) {
-        if (error) *error = [NSError errorWithDomain:@"CursorManager" code:-1 userInfo:@{NSLocalizedDescriptionKey: @"Failed to convert image"}];
+    if (!data) {
         return nil;
     }
-    return [self importCursorFromData:png withName:name error:error];
+
+    NSString *cursor =
+        [self importCursorFromData:data
+                          withName:name
+                              error:error];
+
+    if (cursor) {
+        [self setCursor:cursor type:type];
+    }
+
+    return cursor;
+}
+
++ (NSString *)importCursorFromImage:(UIImage *)image
+                           withName:(NSString *)name
+                              type:(CursorType)type
+                             error:(NSError **)error {
+    NSString *cursor =
+        [self importCursorFromImage:image
+                           withName:name
+                             error:error];
+
+    if (cursor) {
+        [self setCursor:cursor type:type];
+    }
+
+    return cursor;
 }
 
 + (NSString *)importCursorFromData:(NSData *)data withName:(NSString *)name error:(NSError **)error {
