@@ -88,17 +88,28 @@
 
 - (void)viewDidLoad {
     [super viewDidLoad];
+
+    NSLog(@"[CursorManage] viewDidLoad - cursorType=%ld", (long)self.cursorType);
+
     self.view.backgroundColor = ThemeManager.shared.contentBackgroundColor;
     self.navigationItem.title = [self cursorTypeTitle];
 
-    _addButton = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemAdd target:self action:@selector(showImportOptions)];
+    _addButton = [[UIBarButtonItem alloc]
+        initWithBarButtonSystemItem:UIBarButtonSystemItemAdd
+        target:self
+        action:@selector(showImportOptions)];
+
     self.navigationItem.rightBarButtonItem = _addButton;
 
-    _tableView = [[UITableView alloc] initWithFrame:CGRectZero style:UITableViewStyleInsetGrouped];
+    _tableView = [[UITableView alloc]
+        initWithFrame:CGRectZero
+        style:UITableViewStyleInsetGrouped];
+
     _tableView.translatesAutoresizingMaskIntoConstraints = NO;
     _tableView.delegate = self;
     _tableView.dataSource = self;
     _tableView.backgroundColor = UIColor.clearColor;
+
     [self.view addSubview:_tableView];
 
     [NSLayoutConstraint activateConstraints:@[
@@ -108,7 +119,12 @@
         [_tableView.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor],
     ]];
 
+    NSLog(@"[CursorManage] tableView created");
+
     [self reloadCursors];
+
+    NSLog(@"[CursorManage] reloadCursors finished, count=%lu",
+          (unsigned long)_cursorNames.count);
 }
 
 - (void)viewWillAppear:(BOOL)animated {
@@ -117,7 +133,23 @@
 }
 
 - (void)reloadCursors {
-    _cursorNames = [CursorManager cursorNamesForType:(CursorType)self.cursorType];
+    NSLog(@"[CursorManage] reloadCursors type=%ld", (long)self.cursorType);
+
+    @try {
+        _cursorNames = [CursorManager cursorNamesForType:(CursorType)self.cursorType];
+
+        if (!_cursorNames) {
+            _cursorNames = @[];
+        }
+
+        NSLog(@"[CursorManage] cursor count=%lu",
+              (unsigned long)_cursorNames.count);
+
+    } @catch (NSException *exception) {
+        NSLog(@"[CursorManage] EXCEPTION: %@", exception);
+        _cursorNames = @[];
+    }
+
     [_tableView reloadData];
 }
 
