@@ -492,15 +492,14 @@
 
     if ([item[@"vc"] isEqualToString:@"CursorManageViewController"]) {
 
-        CursorManageViewController *vc =
-            [[CursorManageViewController alloc] init];
+    CursorManageViewController *vc =
+        [[CursorManageViewController alloc] init];
 
-        vc.cursorType = [item[@"cursorType"] integerValue];
-        vc.title = item[@"label"];
+    vc.title = item[@"label"];
 
-        [self.navigationController pushViewController:vc animated:YES];
+    [self.navigationController pushViewController:vc animated:YES];
 
-    } else {
+} else {
         [self navigateToVC:item[@"vc"] title:item[@"label"]];
     }
     } else if ([type isEqualToString:@"color"]) {
