@@ -59,12 +59,40 @@
             @{@"type": @"switch", @"label": localize(@"preference.title.disable_haptics", nil), @"key": @"control.disable_haptics"},
             @{@"type": @"slider", @"label": localize(@"preference.title.press_duration", nil), @"key": @"control.press_duration", @"min": @100, @"max": @1000, @"suffix": @"ms"},
 
-            @{@"type": @"navigate", @"label": localize(@"Mouse Cursors", nil), @"vc": @"CursorManageViewController"},
-            @{@"type": @"navigate", @"label": localize(@"Hand Cursors", nil), @"vc": @"CursorManageViewController"},
-            @{@"type": @"navigate", @"label": localize(@"Ibeam Cursors", nil), @"vc": @"CursorManageViewController"},
-            @{@"type": @"navigate", @"label": localize(@"Resize(ew) Cursors", nil), @"vc": @"CursorManageViewController"},
-            @{@"type": @"navigate", @"label": localize(@"Resize(ns) Cursors", nil), @"vc": @"CursorManageViewController"},
+            @{
+    @"type": @"navigate",
+    @"label": localize(@"Mouse Cursors", nil),
+    @"vc": @"CursorManageViewController",
+    @"cursorType": @(CursorManageTypeNormal)
+},
 
+@{
+    @"type": @"navigate",
+    @"label": localize(@"Hand Cursors", nil),
+    @"vc": @"CursorManageViewController",
+    @"cursorType": @(CursorManageTypeHand)
+},
+
+@{
+    @"type": @"navigate",
+    @"label": localize(@"Ibeam Cursors", nil),
+    @"vc": @"CursorManageViewController",
+    @"cursorType": @(CursorManageTypeIBeam)
+},
+
+@{
+    @"type": @"navigate",
+    @"label": localize(@"Resize(ew) Cursors", nil),
+    @"vc": @"CursorManageViewController",
+    @"cursorType": @(CursorManageTypeResizeEW)
+},
+
+@{
+    @"type": @"navigate",
+    @"label": localize(@"Resize(ns) Cursors", nil),
+    @"vc": @"CursorManageViewController",
+    @"cursorType": @(CursorManageTypeResizeNS)
+},
             @{@"type": @"navigate", @"label": localize(@"Edit Controls Layout", nil), @"vc": @"CustomControlsViewController"},
         ]},
         @{@"title": localize(@"Game", nil), @"items": @[
@@ -489,7 +517,20 @@
     if ([type isEqualToString:@"picker"]) {
         [self showPickerForItem:item];
     } else if ([type isEqualToString:@"navigate"]) {
+
+    if ([item[@"vc"] isEqualToString:@"CursorManageViewController"]) {
+
+        CursorManageViewController *vc =
+            [[CursorManageViewController alloc] init];
+
+        vc.cursorType = [item[@"cursorType"] integerValue];
+        vc.title = item[@"label"];
+
+        [self.navigationController pushViewController:vc animated:YES];
+
+    } else {
         [self navigateToVC:item[@"vc"] title:item[@"label"]];
+    }
     } else if ([type isEqualToString:@"color"]) {
         if ([item[@"key"] isEqualToString:@"amethyst_reset_appearance"]) {
             [self resetAppearance];
