@@ -2,17 +2,7 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
-typedef NS_ENUM(NSInteger, CursorManageType) {
-    CursorManageTypeNormal,
-    CursorManageTypeHand,
-    CursorManageTypeIBeam,
-    CursorManageTypeResizeEW,
-    CursorManageTypeResizeNS
-};
-
 @interface CursorManageViewController : UIViewController
-
-@property (nonatomic, assign) CursorManageType cursorType;
 
 @end
 
