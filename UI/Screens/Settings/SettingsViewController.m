@@ -63,36 +63,7 @@
             @{
     @"type": @"navigate",
     @"label": localize(@"Mouse Cursors", nil),
-    @"vc": @"CursorManageViewController",
-    @"cursorType": @(CursorManageTypeNormal)
-},
-
-@{
-    @"type": @"navigate",
-    @"label": localize(@"Hand Cursors", nil),
-    @"vc": @"CursorManageViewController",
-    @"cursorType": @(CursorManageTypeHand)
-},
-
-@{
-    @"type": @"navigate",
-    @"label": localize(@"Ibeam Cursors", nil),
-    @"vc": @"CursorManageViewController",
-    @"cursorType": @(CursorManageTypeIBeam)
-},
-
-@{
-    @"type": @"navigate",
-    @"label": localize(@"Resize(ew) Cursors", nil),
-    @"vc": @"CursorManageViewController",
-    @"cursorType": @(CursorManageTypeResizeEW)
-},
-
-@{
-    @"type": @"navigate",
-    @"label": localize(@"Resize(ns) Cursors", nil),
-    @"vc": @"CursorManageViewController",
-    @"cursorType": @(CursorManageTypeResizeNS)
+    @"vc": @"CursorManageViewController"
 },
             @{@"type": @"navigate", @"label": localize(@"Edit Controls Layout", nil), @"vc": @"CustomControlsViewController"},
         ]},
