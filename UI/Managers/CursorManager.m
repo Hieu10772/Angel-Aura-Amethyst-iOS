@@ -116,11 +116,17 @@ static NSString *const kImageGifName = @"image.gif";
 }
 
 + (void)setCursor:(NSString *)name type:(CursorType)type {
+
     if (!name || name.length == 0) {
         return;
     }
 
-    if ([self isDefaultCursor:name]) {
+    if ([name isEqualToString:kDefaultCursorName] ||
+        [name isEqualToString:@"hand"] ||
+        [name isEqualToString:@"text"] ||
+        [name isEqualToString:@"resize_ew"] ||
+        [name isEqualToString:@"resize_ns"]) {
+        NSLog(@"[CursorManager] Refusing to create files for built-in cursor: %@", name);
         return;
     }
 
@@ -130,6 +136,47 @@ static NSString *const kImageGifName = @"image.gif";
         NSLog(@"[CursorManager] setCursor: invalid directory");
         return;
     }
+
+    NSFileManager *fm = NSFileManager.defaultManager;
+
+    if (![fm fileExistsAtPath:dir]) {
+        NSError *createError = nil;
+
+        BOOL created =
+            [fm createDirectoryAtPath:dir
+          withIntermediateDirectories:YES
+                           attributes:nil
+                                error:&createError];
+
+        if (!created) {
+            NSLog(@"[CursorManager] Failed to create cursor directory %@: %@",
+                  dir,
+                  createError.localizedDescription);
+            return;
+        }
+    }
+
+    NSString *path = [dir stringByAppendingPathComponent:kCursorTypeFileName];
+
+    NSString *value = [NSString stringWithFormat:@"%ld", (long)type];
+
+    NSError *writeError = nil;
+
+    BOOL written =
+        [value writeToFile:path
+                atomically:YES
+                  encoding:NSUTF8StringEncoding
+                     error:&writeError];
+
+    if (!written) {
+        NSLog(@"[CursorManager] Failed to write cursor type: %@",
+              writeError.localizedDescription);
+    } else {
+        NSLog(@"[CursorManager] Cursor type saved: %@ -> %ld",
+              path,
+              (long)type);
+    }
+}
 
     NSFileManager *fm = NSFileManager.defaultManager;
 
@@ -284,7 +331,12 @@ static NSString *const kImageGifName = @"image.gif";
         return;
     }
 
-    NSString *dir = [self cursorPathForName:name];
+    if ([self isDefaultCursor:name]) {
+    NSLog(@"[CursorManager] Refusing to create files for default cursor");
+    return;
+}
+
+NSString *dir = [self cursorPathForName:name];
 
     if (!dir) {
         NSLog(@"[CursorManager] saveImageData: invalid directory");
@@ -344,14 +396,34 @@ static NSString *const kImageGifName = @"image.gif";
 }
 
 + (void)setHitboxForCursor:(NSString *)name hitbox:(CGPoint)hitbox {
+
+    if (!name || name.length == 0 || [self isDefaultCursor:name]) {
+        NSLog(@"[CursorManager] Refusing to create hitbox for default cursor");
+        return;
+    }
+
     NSFileManager *fm = NSFileManager.defaultManager;
     NSString *dir = [self cursorPathForName:name];
+
     if (![fm fileExistsAtPath:dir]) {
-        [fm createDirectoryAtPath:dir withIntermediateDirectories:YES attributes:nil error:nil];
+        [fm createDirectoryAtPath:dir
+          withIntermediateDirectories:YES
+                           attributes:nil
+                                error:nil];
     }
+
     NSString *path = [dir stringByAppendingPathComponent:kHitboxFileName];
-    NSDictionary *json = @{@"x": @(roundf(hitbox.x)), @"y": @(roundf(hitbox.y))};
-    NSData *data = [NSJSONSerialization dataWithJSONObject:json options:0 error:nil];
+
+    NSDictionary *json = @{
+        @"x": @(roundf(hitbox.x)),
+        @"y": @(roundf(hitbox.y))
+    };
+
+    NSData *data =
+        [NSJSONSerialization dataWithJSONObject:json
+                                        options:0
+                                          error:nil];
+
     [data writeToFile:path atomically:YES];
 }
 
@@ -377,6 +449,10 @@ static NSString *const kImageGifName = @"image.gif";
 
 + (NSString *)uniqueCursorNameFor:(NSString *)name {
     NSString *base = [self sanitizedName:name];
+
+    if ([base isEqualToString:kDefaultCursorName]) {
+        base = @"Cursor";
+    }
     NSString *candidate = base;
     NSArray *existing = [self cursorNames];
     NSInteger i = 2;
