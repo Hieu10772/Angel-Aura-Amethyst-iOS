@@ -59,38 +59,6 @@ static NSString *const kImageGifName = @"image.gif";
     return path;
 }
 
-
-    NSString *gamePath = [NSString stringWithUTF8String:gameDir];
-    NSString *path = [gamePath stringByAppendingPathComponent:kCursorsDirName];
-
-    NSFileManager *fm = NSFileManager.defaultManager;
-
-    BOOL isDirectory = NO;
-
-    if (![fm fileExistsAtPath:path isDirectory:&isDirectory]) {
-        NSError *error = nil;
-
-        BOOL created = [fm createDirectoryAtPath:path
-                     withIntermediateDirectories:YES
-                                      attributes:nil
-                                           error:&error];
-
-        if (!created) {
-            NSLog(@"[CursorManager] Failed to create cursors directory: %@",
-                  error.localizedDescription);
-            return nil;
-        }
-    } else if (!isDirectory) {
-        NSLog(@"[CursorManager] ERROR: cursor path exists but is not a directory: %@",
-              path);
-        return nil;
-    }
-
-    NSLog(@"[CursorManager] Cursors directory: %@", path);
-
-    return path;
-}
-
 + (NSString *)defaultCursorName {
     return kDefaultCursorName;
 }
