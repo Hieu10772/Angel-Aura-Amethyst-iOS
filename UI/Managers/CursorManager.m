@@ -273,12 +273,28 @@ static NSString *const kImageGifName = @"image.gif";
     if ([self isDefaultCursor:name]) {
         return [UIImage imageNamed:@"MousePointer"];
     }
+    
+    if ([name isEqualToString:@"hand"]) {
+        return [UIImage imageNamed:@"HandPointer"] ?: [UIImage imageNamed:@"MousePointer"];
+    }
+    if ([name isEqualToString:@"text"]) {
+        return [UIImage imageNamed:@"IBeamPointer"] ?: [UIImage imageNamed:@"MousePointer"];
+    }
+    if ([name isEqualToString:@"resize_ew"]) {
+        return [UIImage imageNamed:@"ResizeEWPointer"] ?: [UIImage imageNamed:@"MousePointer"];
+    }
+    if ([name isEqualToString:@"resize_ns"]) {
+        return [UIImage imageNamed:@"ResizeNSPointer"] ?: [UIImage imageNamed:@"MousePointer"];
+    }
+    
     NSString *path = [self imagePathForCursor:name];
     if ([[NSFileManager defaultManager] fileExistsAtPath:path]) {
         return [UIImage imageWithContentsOfFile:path];
     }
+    
     return [UIImage imageNamed:@"MousePointer"];
 }
+
 
 + (void)saveImageData:(NSData *)data
                isGIF:(BOOL)isGIF
