@@ -178,47 +178,6 @@ static NSString *const kImageGifName = @"image.gif";
     }
 }
 
-    NSFileManager *fm = NSFileManager.defaultManager;
-
-    if (![fm fileExistsAtPath:dir]) {
-        NSError *createError = nil;
-
-        BOOL created =
-            [fm createDirectoryAtPath:dir
-          withIntermediateDirectories:YES
-                           attributes:nil
-                                error:&createError];
-
-        if (!created) {
-            NSLog(@"[CursorManager] Failed to create cursor directory %@: %@",
-                  dir,
-                  createError.localizedDescription);
-            return;
-        }
-    }
-
-    NSString *path = [dir stringByAppendingPathComponent:kCursorTypeFileName];
-
-    NSString *value = [NSString stringWithFormat:@"%ld", (long)type];
-
-    NSError *writeError = nil;
-
-    BOOL written =
-        [value writeToFile:path
-                atomically:YES
-                  encoding:NSUTF8StringEncoding
-                     error:&writeError];
-
-    if (!written) {
-        NSLog(@"[CursorManager] Failed to write cursor type: %@",
-              writeError.localizedDescription);
-    } else {
-        NSLog(@"[CursorManager] Cursor type saved: %@ -> %ld",
-              path,
-              (long)type);
-    }
-}
-
 + (NSArray<NSString *> *)cursorNamesForType:(CursorType)type {
     NSFileManager *fm = NSFileManager.defaultManager;
 
