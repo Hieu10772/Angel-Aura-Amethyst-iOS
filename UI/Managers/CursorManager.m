@@ -92,7 +92,7 @@ static NSString *const kImageGifName = @"image.gif";
     NSMutableArray *names = [NSMutableArray arrayWithObject:kDefaultCursorName];
     for (NSString *item in content) {
         if ([item hasPrefix:@"."]) continue;
-        if ([item isEqualToString:kDefaultCursorName]) continue;
+        if ([self isBuiltInCursor:item]) continue;
         BOOL isDir = NO;
         NSString *full = [self.cursorsDirectory stringByAppendingPathComponent:item];
         if ([fm fileExistsAtPath:full isDirectory:&isDir] && isDir) {
@@ -103,7 +103,11 @@ static NSString *const kImageGifName = @"image.gif";
 }
 
 + (CursorType)cursorTypeForCursor:(NSString *)name {
-    if ([name isEqualToString:kDefaultCursorName]) {
+    if ([self isBuiltInCursor:name]) {
+        if ([name isEqualToString:@"hand"]) return CursorTypeHand;
+        if ([name isEqualToString:@"text"]) return CursorTypeIBeam;
+        if ([name isEqualToString:@"resize_ew"]) return CursorTypeResizeEW;
+        if ([name isEqualToString:@"resize_ns"]) return CursorTypeResizeNS;
         return CursorTypeNormal;
     }
 
@@ -124,16 +128,11 @@ static NSString *const kImageGifName = @"image.gif";
 }
 
 + (void)setCursor:(NSString *)name type:(CursorType)type {
-
     if (!name || name.length == 0) {
         return;
     }
 
-    if ([name isEqualToString:kDefaultCursorName] ||
-        [name isEqualToString:@"hand"] ||
-        [name isEqualToString:@"text"] ||
-        [name isEqualToString:@"resize_ew"] ||
-        [name isEqualToString:@"resize_ns"]) {
+    if ([self isBuiltInCursor:name]) {
         NSLog(@"[CursorManager] Refusing to create files for built-in cursor: %@", name);
         return;
     }
@@ -194,10 +193,6 @@ static NSString *const kImageGifName = @"image.gif";
 
     NSMutableArray<NSString *> *names = [NSMutableArray array];
 
-    /*
-     * Built-in cursors.
-     * They belong to their corresponding cursor type.
-     */
     switch (type) {
         case CursorTypeNormal:
             [names addObject:kDefaultCursorName];
@@ -225,11 +220,7 @@ static NSString *const kImageGifName = @"image.gif";
             continue;
         }
 
-        if ([item isEqualToString:kDefaultCursorName] ||
-            [item isEqualToString:@"hand"] ||
-            [item isEqualToString:@"text"] ||
-            [item isEqualToString:@"resize_ew"] ||
-            [item isEqualToString:@"resize_ns"]) {
+        if ([self isBuiltInCursor:item]) {
             continue;
         }
 
@@ -264,8 +255,10 @@ static NSString *const kImageGifName = @"image.gif";
 
 #pragma mark - Image
 
-// The actual image file name stored in a cursor folder.
 + (NSString *)imageFileNameForCursor:(NSString *)name {
+    if ([self isBuiltInCursor:name]) {
+        return kImagePngName;
+    }
     NSString *dir = [self cursorPathForName:name];
     NSFileManager *fm = NSFileManager.defaultManager;
     if ([fm fileExistsAtPath:[dir stringByAppendingPathComponent:kImageGifName]]) {
@@ -278,22 +271,28 @@ static NSString *const kImageGifName = @"image.gif";
     return [[self cursorPathForName:name] stringByAppendingPathComponent:[self imageFileNameForCursor:name]];
 }
 
++ (UIImage *)loadBundleImage:(NSString *)imageName {
+    NSBundle *bundle = [NSBundle bundleForClass:[self class]];
+    UIImage *image = [UIImage imageNamed:imageName inBundle:bundle compatibleWithTraitCollection:nil];
+    if (image) return image;
+    return [UIImage imageNamed:imageName];
+}
+
 + (UIImage *)imageForCursor:(NSString *)name {
     if ([self isDefaultCursor:name]) {
-        return [UIImage imageNamed:@"MousePointer"];
+        return [self loadBundleImage:@"MousePointer"];
     }
-    
     if ([name isEqualToString:@"hand"]) {
-        return [UIImage imageNamed:@"HandPointer"] ?: [UIImage imageNamed:@"MousePointer"];
+        return [self loadBundleImage:@"HandPointer"] ?: [self loadBundleImage:@"MousePointer"];
     }
     if ([name isEqualToString:@"text"]) {
-        return [UIImage imageNamed:@"IBeamPointer"] ?: [UIImage imageNamed:@"MousePointer"];
+        return [self loadBundleImage:@"IBeamPointer"] ?: [self loadBundleImage:@"MousePointer"];
     }
     if ([name isEqualToString:@"resize_ew"]) {
-        return [UIImage imageNamed:@"ResizeEWPointer"] ?: [UIImage imageNamed:@"MousePointer"];
+        return [self loadBundleImage:@"ResizeEWPointer"] ?: [self loadBundleImage:@"MousePointer"];
     }
     if ([name isEqualToString:@"resize_ns"]) {
-        return [UIImage imageNamed:@"ResizeNSPointer"] ?: [UIImage imageNamed:@"MousePointer"];
+        return [self loadBundleImage:@"ResizeNSPointer"] ?: [self loadBundleImage:@"MousePointer"];
     }
     
     NSString *path = [self imagePathForCursor:name];
@@ -301,9 +300,8 @@ static NSString *const kImageGifName = @"image.gif";
         return [UIImage imageWithContentsOfFile:path];
     }
     
-    return [UIImage imageNamed:@"MousePointer"];
+    return [self loadBundleImage:@"MousePointer"];
 }
-
 
 + (void)saveImageData:(NSData *)data
                isGIF:(BOOL)isGIF
@@ -314,12 +312,12 @@ static NSString *const kImageGifName = @"image.gif";
         return;
     }
 
-    if ([self isDefaultCursor:name]) {
-    NSLog(@"[CursorManager] Refusing to create files for default cursor");
-    return;
-}
+    if ([self isBuiltInCursor:name]) {
+        NSLog(@"[CursorManager] Refusing to create files for built-in cursor: %@", name);
+        return;
+    }
 
-NSString *dir = [self cursorPathForName:name];
+    NSString *dir = [self cursorPathForName:name];
 
     if (!dir) {
         NSLog(@"[CursorManager] saveImageData: invalid directory");
@@ -379,9 +377,8 @@ NSString *dir = [self cursorPathForName:name];
 }
 
 + (void)setHitboxForCursor:(NSString *)name hitbox:(CGPoint)hitbox {
-
-    if (!name || name.length == 0 || [self isDefaultCursor:name]) {
-        NSLog(@"[CursorManager] Refusing to create hitbox for default cursor");
+    if (!name || name.length == 0 || [self isBuiltInCursor:name]) {
+        NSLog(@"[CursorManager] Refusing to create hitbox for built-in cursor");
         return;
     }
 
@@ -413,7 +410,7 @@ NSString *dir = [self cursorPathForName:name];
 #pragma mark - Delete
 
 + (BOOL)deleteCursor:(NSString *)name {
-    if ([self isDefaultCursor:name]) return NO;
+    if ([self isBuiltInCursor:name]) return NO;
     NSFileManager *fm = NSFileManager.defaultManager;
     NSString *dir = [self cursorPathForName:name];
     if (![fm fileExistsAtPath:dir]) return NO;
@@ -433,7 +430,7 @@ NSString *dir = [self cursorPathForName:name];
 + (NSString *)uniqueCursorNameFor:(NSString *)name {
     NSString *base = [self sanitizedName:name];
 
-    if ([base isEqualToString:kDefaultCursorName]) {
+    if ([self isBuiltInCursor:base]) {
         base = @"Cursor";
     }
     NSString *candidate = base;
@@ -510,7 +507,6 @@ NSString *dir = [self cursorPathForName:name];
     return cursor;
 }
 
-
 + (NSString *)importCursorFromData:(NSData *)data withName:(NSString *)name error:(NSError **)error {
     NSString *cursor = [self uniqueCursorNameFor:name];
     BOOL isGIF = [self isAnimatedGIFData:data];
@@ -544,9 +540,6 @@ NSString *dir = [self cursorPathForName:name];
     CGFloat w = image.size.width;
     CGFloat h = image.size.height;
     if (w <= 0 || h <= 0) return mouseScale;
-    // Default pointer rendered at 18x27 with scale=1; custom images are scaled to
-    // a comparable size so the pointer stays usable on screen.
-    // Keep the height the same as default (27 * mouseScale).
     return (27.0 * mouseScale) / h;
 }
 
