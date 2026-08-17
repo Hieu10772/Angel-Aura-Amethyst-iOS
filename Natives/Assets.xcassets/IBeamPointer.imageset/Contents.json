@@ -1,0 +1,12 @@
+{
+  "images" : [
+    {
+      "filename" : "img_mouse_pointer_ibeam.png",
+      "idiom" : "universal"
+    }
+  ],
+  "info" : {
+    "author" : "xcode",
+    "version" : 1
+  }
+}
