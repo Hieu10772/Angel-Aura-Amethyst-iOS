@@ -488,21 +488,10 @@
 
     if ([type isEqualToString:@"picker"]) {
         [self showPickerForItem:item];
-    } else if ([type isEqualToString:@"navigate"]) {
-
-    if ([item[@"vc"] isEqualToString:@"CursorManageViewController"]) {
-
-    CursorManageViewController *vc =
-        [[CursorManageViewController alloc] init];
-
-    vc.title = item[@"label"];
-
-    [self.navigationController pushViewController:vc animated:YES];
-
-} else {
+        } else if ([type isEqualToString:@"navigate"]) {
         [self navigateToVC:item[@"vc"] title:item[@"label"]];
-    }
     } else if ([type isEqualToString:@"color"]) {
+
         if ([item[@"key"] isEqualToString:@"amethyst_reset_appearance"]) {
             [self resetAppearance];
         } else {
