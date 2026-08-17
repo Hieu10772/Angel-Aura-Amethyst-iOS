@@ -64,16 +64,21 @@ static NSString *const kImageGifName = @"image.gif";
 }
 
 + (BOOL)isDefaultCursor:(NSString *)name {
-    return [name isEqualToString:kDefaultCursorName];
+    return [name isEqualToString:kDefaultCursorName] || [name isEqualToString:@"MousePointer"];
 }
 
 + (BOOL)isBuiltInCursor:(NSString *)name {
     if (!name) return NO;
     return [name isEqualToString:kDefaultCursorName] ||
+           [name isEqualToString:@"MousePointer"] ||
            [name isEqualToString:@"hand"] ||
+           [name isEqualToString:@"HandPointer"] ||
            [name isEqualToString:@"text"] ||
+           [name isEqualToString:@"IBeamPointer"] ||
            [name isEqualToString:@"resize_ew"] ||
-           [name isEqualToString:@"resize_ns"];
+           [name isEqualToString:@"ResizeEWPointer"] ||
+           [name isEqualToString:@"resize_ns"] ||
+           [name isEqualToString:@"ResizeNSPointer"];
 }
 
 + (NSString *)cursorPathForName:(NSString *)name {
@@ -104,10 +109,10 @@ static NSString *const kImageGifName = @"image.gif";
 
 + (CursorType)cursorTypeForCursor:(NSString *)name {
     if ([self isBuiltInCursor:name]) {
-        if ([name isEqualToString:@"hand"]) return CursorTypeHand;
-        if ([name isEqualToString:@"text"]) return CursorTypeIBeam;
-        if ([name isEqualToString:@"resize_ew"]) return CursorTypeResizeEW;
-        if ([name isEqualToString:@"resize_ns"]) return CursorTypeResizeNS;
+        if ([name isEqualToString:@"hand"] || [name isEqualToString:@"HandPointer"]) return CursorTypeHand;
+        if ([name isEqualToString:@"text"] || [name isEqualToString:@"IBeamPointer"]) return CursorTypeIBeam;
+        if ([name isEqualToString:@"resize_ew"] || [name isEqualToString:@"ResizeEWPointer"]) return CursorTypeResizeEW;
+        if ([name isEqualToString:@"resize_ns"] || [name isEqualToString:@"ResizeNSPointer"]) return CursorTypeResizeNS;
         return CursorTypeNormal;
     }
 
@@ -279,22 +284,33 @@ static NSString *const kImageGifName = @"image.gif";
 }
 
 + (UIImage *)imageForCursor:(NSString *)name {
+    if (!name || name.length == 0) {
+        return [UIImage imageNamed:@"MousePointer"];
+    }
+
     if ([self isDefaultCursor:name]) {
         return [UIImage imageNamed:@"MousePointer"] ?: [UIImage imageNamed:@"default"];
     }
-    if ([name isEqualToString:@"hand"]) {
+    if ([name isEqualToString:@"hand"] || [name isEqualToString:@"HandPointer"]) {
         return [UIImage imageNamed:@"HandPointer"] ?: [UIImage imageNamed:@"MousePointer"];
     }
-    if ([name isEqualToString:@"text"]) {
+    if ([name isEqualToString:@"text"] || [name isEqualToString:@"IBeamPointer"]) {
         return [UIImage imageNamed:@"IBeamPointer"] ?: [UIImage imageNamed:@"MousePointer"];
     }
-    if ([name isEqualToString:@"resize_ew"]) {
+    if ([name isEqualToString:@"resize_ew"] || [name isEqualToString:@"ResizeEWPointer"]) {
         return [UIImage imageNamed:@"ResizeEWPointer"] ?: [UIImage imageNamed:@"MousePointer"];
     }
-    if ([name isEqualToString:@"resize_ns"]) {
+    if ([name isEqualToString:@"resize_ns"] || [name isEqualToString:@"ResizeNSPointer"]) {
         return [UIImage imageNamed:@"ResizeNSPointer"] ?: [UIImage imageNamed:@"MousePointer"];
     }
     
+    // Tìm trực tiếp trong Assets Catalog trước
+    UIImage *assetImage = [UIImage imageNamed:name];
+    if (assetImage) {
+        return assetImage;
+    }
+
+    // Nếu không có trong Assets mới tìm trong thư mục ngoài bộ nhớ
     NSString *path = [self imagePathForCursor:name];
     if ([[NSFileManager defaultManager] fileExistsAtPath:path]) {
         return [UIImage imageWithContentsOfFile:path];
@@ -302,9 +318,6 @@ static NSString *const kImageGifName = @"image.gif";
     
     return [UIImage imageNamed:@"MousePointer"];
 }
-
-
-
 
 + (void)saveImageData:(NSData *)data
                isGIF:(BOOL)isGIF
