@@ -280,19 +280,20 @@ static NSString *const kImageGifName = @"image.gif";
 
 + (UIImage *)imageForCursor:(NSString *)name {
     if ([self isDefaultCursor:name]) {
-        return [self loadBundleImage:@"MousePointer"];
+        return [UIImage imageNamed:@"MousePointer"];
     }
+    
     if ([name isEqualToString:@"hand"]) {
-        return [self loadBundleImage:@"HandPointer"] ?: [self loadBundleImage:@"MousePointer"];
+        return [UIImage imageNamed:@"img_mouse_pointer_link.png"] ?: [UIImage imageNamed:@"MousePointer"];
     }
     if ([name isEqualToString:@"text"]) {
-        return [self loadBundleImage:@"IBeamPointer"] ?: [self loadBundleImage:@"MousePointer"];
+        return [UIImage imageNamed:@"img_mouse_pointer_ibeam.png"] ?: [UIImage imageNamed:@"MousePointer"];
     }
     if ([name isEqualToString:@"resize_ew"]) {
-        return [self loadBundleImage:@"ResizeEWPointer"] ?: [self loadBundleImage:@"MousePointer"];
+        return [UIImage imageNamed:@"img_mouse_pointer_resize_ew.png"] ?: [UIImage imageNamed:@"MousePointer"];
     }
     if ([name isEqualToString:@"resize_ns"]) {
-        return [self loadBundleImage:@"ResizeNSPointer"] ?: [self loadBundleImage:@"MousePointer"];
+        return [UIImage imageNamed:@"img_mouse_pointer_resize_ns.png"] ?: [UIImage imageNamed:@"MousePointer"];
     }
     
     NSString *path = [self imagePathForCursor:name];
@@ -300,8 +301,9 @@ static NSString *const kImageGifName = @"image.gif";
         return [UIImage imageWithContentsOfFile:path];
     }
     
-    return [self loadBundleImage:@"MousePointer"];
+    return [UIImage imageNamed:@"MousePointer"];
 }
+
 
 + (void)saveImageData:(NSData *)data
                isGIF:(BOOL)isGIF
