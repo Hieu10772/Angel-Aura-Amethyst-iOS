@@ -447,6 +447,31 @@ NSString *dir = [self cursorPathForName:name];
 
 + (NSString *)importCursorFromImage:(UIImage *)image
                            withName:(NSString *)name
+                              error:(NSError **)error {
+    if (!image) {
+        if (error) {
+            *error = [NSError errorWithDomain:@"CursorManager" 
+                                         code:-1 
+                                     userInfo:@{NSLocalizedDescriptionKey: @"Invalid image"}];
+        }
+        return nil;
+    }
+    
+    NSData *pngData = UIImagePNGRepresentation(image);
+    if (!pngData) {
+        if (error) {
+            *error = [NSError errorWithDomain:@"CursorManager" 
+                                         code:-1 
+                                     userInfo:@{NSLocalizedDescriptionKey: @"Failed to convert image to PNG data"}];
+        }
+        return nil;
+    }
+    
+    return [self importCursorFromData:pngData withName:name error:error];
+}
+
++ (NSString *)importCursorFromImage:(UIImage *)image
+                           withName:(NSString *)name
                               type:(CursorType)type
                              error:(NSError **)error {
     NSString *cursor =
@@ -460,6 +485,7 @@ NSString *dir = [self cursorPathForName:name];
 
     return cursor;
 }
+
 
 + (NSString *)importCursorFromData:(NSData *)data withName:(NSString *)name error:(NSError **)error {
     NSString *cursor = [self uniqueCursorNameFor:name];
