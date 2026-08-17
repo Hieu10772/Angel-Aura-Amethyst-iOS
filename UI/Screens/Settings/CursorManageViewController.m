@@ -15,84 +15,60 @@
 @property (nonatomic, strong) UIBarButtonItem *addButton;
 @property (nonatomic, assign) BOOL isImporting;
 
+// Biến lưu trạng thái đang chọn chỉnh sửa loại con trỏ nào ở Section 0
+@property (nonatomic, assign) CursorManageType currentSelectedType;
+
 @end
 
 @implementation CursorManageViewController
 
-#pragma mark - Cursor Type
+#pragma mark - Lấy Tên và Ảnh Đang Gán
 
-- (NSString *)cursorTypeTitle {
-    switch (self.cursorType) {
-        case CursorManageTypeHand:
-            return @"Hand Cursor";
-
-        case CursorManageTypeIBeam:
-            return @"IBeam Cursor";
-
-        case CursorManageTypeResizeEW:
-            return @"Resize(EW) Cursor";
-
-        case CursorManageTypeResizeNS:
-            return @"Resize(NS) Cursor";
-
-        case CursorManageTypeNormal:
-        default:
-            return @"Mouse Cursor";
+// Hiển thị tên các loại chuột
+- (NSString *)nameForType:(CursorManageType)type {
+    switch (type) {
+        case CursorManageTypeNormal: return @"Default (Normal)";
+        case CursorManageTypeHand: return @"Hand";
+        case CursorManageTypeIBeam: return @"IBeam";
+        case CursorManageTypeResizeEW: return @"Resize (EW)";
+        case CursorManageTypeResizeNS: return @"Resize (NS)";
     }
 }
 
-- (NSString *)selectedCursorName {
-    switch (self.cursorType) {
-        case CursorManageTypeHand:
-            return CursorManager.handCursorName;
-
-        case CursorManageTypeIBeam:
-            return CursorManager.ibeamCursorName;
-
-        case CursorManageTypeResizeEW:
-            return CursorManager.resizeEWCursorName;
-
-        case CursorManageTypeResizeNS:
-            return CursorManager.resizeNSCursorName;
-
+// Lấy tên ảnh đang được gán cho từng loại
+- (NSString *)assignedCursorForType:(CursorManageType)type {
+    switch (type) {
+        case CursorManageTypeHand: return CursorManager.handCursorName;
+        case CursorManageTypeIBeam: return CursorManager.ibeamCursorName;
+        case CursorManageTypeResizeEW: return CursorManager.resizeEWCursorName;
+        case CursorManageTypeResizeNS: return CursorManager.resizeNSCursorName;
         case CursorManageTypeNormal:
-        default:
-            return CursorManager.normalCursorName;
+        default: return CursorManager.normalCursorName;
     }
 }
 
+// Gán ảnh mới cho loại đang được chọn
 - (void)setSelectedCursorName:(NSString *)name {
-    switch (self.cursorType) {
-        case CursorManageTypeHand:
-            [CursorManager setHandCursorName:name];
-            break;
-
-        case CursorManageTypeIBeam:
-            [CursorManager setIBeamCursorName:name];
-            break;
-
-        case CursorManageTypeResizeEW:
-            [CursorManager setResizeEWCursorName:name];
-            break;
-
-        case CursorManageTypeResizeNS:
-            [CursorManager setResizeNSCursorName:name];
-            break;
-
+    switch (self.currentSelectedType) {
+        case CursorManageTypeHand: [CursorManager setHandCursorName:name]; break;
+        case CursorManageTypeIBeam: [CursorManager setIBeamCursorName:name]; break;
+        case CursorManageTypeResizeEW: [CursorManager setResizeEWCursorName:name]; break;
+        case CursorManageTypeResizeNS: [CursorManager setResizeNSCursorName:name]; break;
         case CursorManageTypeNormal:
-        default:
-            [CursorManager setNormalCursorName:name];
-            break;
+        default: [CursorManager setNormalCursorName:name]; break;
     }
 }
+
+#pragma mark - View Lifecycle
 
 - (void)viewDidLoad {
     [super viewDidLoad];
 
-    NSLog(@"[CursorManage] viewDidLoad - cursorType=%ld", (long)self.cursorType);
+    // Mặc định chọn loại Normal khi vừa vào
+    _currentSelectedType = CursorManageTypeNormal;
 
     self.view.backgroundColor = ThemeManager.shared.contentBackgroundColor;
-    self.navigationItem.title = [self cursorTypeTitle];
+    self.navigationItem.title = @"Mouse Cursors";
 
     _addButton = [[UIBarButtonItem alloc]
         initWithBarButtonSystemItem:UIBarButtonSystemItemAdd
@@ -119,12 +95,7 @@
         [_tableView.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor],
     ]];
 
-    NSLog(@"[CursorManage] tableView created");
-
     [self reloadCursors];
-
-    NSLog(@"[CursorManage] reloadCursors finished, count=%lu",
-          (unsigned long)_cursorNames.count);
 }
 
 - (void)viewWillAppear:(BOOL)animated {
@@ -133,27 +104,20 @@
 }
 
 - (void)reloadCursors {
-    NSLog(@"[CursorManage] reloadCursors type=%ld", (long)self.cursorType);
-
     @try {
-        _cursorNames = [CursorManager cursorNamesForType:(CursorType)self.cursorType];
+        // Lấy TẤT CẢ các ảnh cursor đã import để hiển thị ở danh sách bên dưới
+        _cursorNames = [CursorManager cursorNames];
 
         if (!_cursorNames) {
             _cursorNames = @[];
         }
-
-        NSLog(@"[CursorManage] cursor count=%lu",
-              (unsigned long)_cursorNames.count);
-
     } @catch (NSException *exception) {
-        NSLog(@"[CursorManage] EXCEPTION: %@", exception);
         _cursorNames = @[];
     }
-
     [_tableView reloadData];
 }
 
-#pragma mark - Import
+#pragma mark - Import Logic
 
 - (void)showImportOptions {
     UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"Add Cursor"
@@ -277,23 +241,68 @@
 #pragma mark - TableView
 
 - (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView {
-    return 1;
+    return 2; // CHIA LÀM 2 PHẦN
 }
 
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
-    return _cursorNames.count;
+    if (section == 0) {
+        return 5; // 5 loại cursor
+    }
+    return _cursorNames.count; // Danh sách ảnh đã import
 }
 
 - (CGFloat)tableView:(UITableView *)tableView heightForRowAtIndexPath:(NSIndexPath *)indexPath {
-    return 72;
+    if (indexPath.section == 0) {
+        return 50; // Chiều cao hàng của loại cursor
+    }
+    return 72; // Chiều cao hàng của danh sách ảnh
 }
 
 - (NSString *)tableView:(UITableView *)tableView titleForHeaderInSection:(NSInteger)section {
-    return @"Installed Cursors";
+    if (section == 0) return @"Cursor Types";
+    return @"Imported Cursors";
 }
 
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
     
+    // ==========================================
+    // PHẦN 1: CHỌN LOẠI CURSOR (Ở TRÊN)
+    // ==========================================
+    if (indexPath.section == 0) {
+        UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:@"TypeCell"];
+        if (!cell) {
+            cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleValue1 reuseIdentifier:@"TypeCell"];
+            cell.backgroundColor = ThemeManager.shared.cardBackgroundColor;
+            cell.textLabel.textColor = ThemeManager.shared.primaryTextColor;
+        }
+        
+        CursorManageType rowType = (CursorManageType)indexPath.row;
+        
+        // Tên loại (Ví dụ: Hand, IBeam...)
+        cell.textLabel.text = [self nameForType:rowType];
+        
+        // Tên ảnh đang gán cho loại đó hiện ở bên phải
+        NSString *assignedName = [self assignedCursorForType:rowType];
+        cell.detailTextLabel.text = [CursorManager isDefaultCursor:assignedName] ? @"Default" : assignedName;
+        
+        // Đổi màu / Thêm checkmark nếu loại đó đang được chọn để chỉnh sửa
+        if (self.currentSelectedType == rowType) {
+            cell.accessoryType = UITableViewCellAccessoryCheckmark;
+            cell.textLabel.font = [UIFont boldSystemFontOfSize:16];
+            cell.detailTextLabel.textColor = ThemeManager.shared.accentColor;
+            cell.tintColor = ThemeManager.shared.accentColor; // Màu checkmark
+        } else {
+            cell.accessoryType = UITableViewCellAccessoryNone;
+            cell.textLabel.font = [UIFont systemFontOfSize:16];
+            cell.detailTextLabel.textColor = ThemeManager.shared.secondaryTextColor;
+        }
+        
+        return cell;
+    }
+    
+    // ==========================================
+    // PHẦN 2: CHỌN ẢNH ĐÃ IMPORT (Ở DƯỚI)
+    // ==========================================
     UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:@"CursorCell"];
     if (!cell) {
         cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleSubtitle reuseIdentifier:@"CursorCell"];
@@ -314,20 +323,26 @@
 
     NSString *name = _cursorNames[indexPath.row];
     BOOL isDefault = [CursorManager isDefaultCursor:name];
-    BOOL isCurrent = [[CursorManager currentCursorName] isEqualToString:name];
+    
+    // Lấy tên ảnh đang gán cho LOẠI ĐANG CHỌN (Ví dụ: đang chọn Hand, xem nó là ảnh nào)
+    NSString *currentAssignedForSelectedType = [self assignedCursorForType:self.currentSelectedType];
+    BOOL isSelectedForCurrentType = [currentAssignedForSelectedType isEqualToString:name];
 
     cell.textLabel.text = isDefault ? @"Default (built-in)" : name;
     cell.textLabel.textColor = ThemeManager.shared.primaryTextColor;
 
     CGPoint hitbox = [CursorManager hitboxForCursor:name];
+    
+    // Báo hiệu xem ảnh này có đang làm đại diện cho loại được chọn không
     cell.detailTextLabel.text = [NSString stringWithFormat:@"Hitbox: (%.0f, %.0f)%@",
                                  hitbox.x, hitbox.y,
-                                 isCurrent ? @"  •  In use" : @""];
-    cell.detailTextLabel.textColor = isCurrent ? ThemeManager.shared.accentColor : ThemeManager.shared.secondaryTextColor;
+                                 isSelectedForCurrentType ? [NSString stringWithFormat:@"  •  Selected for %@", [self nameForType:self.currentSelectedType]] : @""];
+                                 
+    cell.detailTextLabel.textColor = isSelectedForCurrentType ? ThemeManager.shared.accentColor : ThemeManager.shared.secondaryTextColor;
 
     UIImageView *icon = (UIImageView *)cell.accessoryView;
     icon.image = [CursorManager imageForCursor:name];
-    icon.layer.borderWidth = isCurrent ? 2 : 0;
+    icon.layer.borderWidth = isSelectedForCurrentType ? 2 : 0;
     icon.layer.borderColor = ThemeManager.shared.accentColor.CGColor;
 
     return cell;
@@ -335,17 +350,26 @@
 
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
     [tableView deselectRowAtIndexPath:indexPath animated:YES];
-
     [HapticManager.shared play:HapticTypeLight];
 
-    NSString *name = _cursorNames[indexPath.row];
-
-    [self setSelectedCursorName:name];
-
-    [tableView reloadData];
+    if (indexPath.section == 0) {
+        // Nếu người dùng click vào phần trên, đổi loại cursor đang được chọn để thiết lập
+        self.currentSelectedType = (CursorManageType)indexPath.row;
+        [tableView reloadData];
+    } else {
+        // Nếu người dùng click vào ảnh ở dưới, GÁN ảnh đó vào loại cursor đang được chọn
+        NSString *name = _cursorNames[indexPath.row];
+        [self setSelectedCursorName:name];
+        [tableView reloadData];
+    }
 }
 
+// Logic vuốt để xoá / sửa hitbox (chỉ cho phép ở Section chứa ảnh dưới cùng)
 - (UISwipeActionsConfiguration *)tableView:(UITableView *)tableView trailingSwipeActionsConfigurationForRowAtIndexPath:(NSIndexPath *)indexPath {
+    
+    // Không cho vuốt xoá đối với các Hàng của Section 0
+    if (indexPath.section == 0) return nil; 
+    
     NSString *name = _cursorNames[indexPath.row];
     BOOL isDefault = [CursorManager isDefaultCursor:name];
 
@@ -383,16 +407,15 @@
             showDialog(@"Error", @"Failed to delete cursor.");
             return;
         }
-        if ([[CursorManager currentCursorName] isEqualToString:name]) {
-            [CursorManager setCurrentCursorName:[CursorManager defaultCursorName]];
+        
+        // Trả về default nếu ảnh bị xoá đang được gán cho loại hiện tại
+        if ([[self assignedCursorForType:self.currentSelectedType] isEqualToString:name]) {
+            [self setSelectedCursorName:[CursorManager defaultCursorName]];
         }
+        
         [self reloadCursors];
     }]];
     [self presentViewController:alert animated:YES completion:nil];
-}
-
-- (NSString *)tableView:(UITableView *)tableView titleForFooterInSection:(NSInteger)section {
-    return @"The default cursor cannot be deleted. Swipe a cursor left to edit its hitbox or delete it.";
 }
 
 @end
