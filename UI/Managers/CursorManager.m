@@ -67,6 +67,15 @@ static NSString *const kImageGifName = @"image.gif";
     return [name isEqualToString:kDefaultCursorName];
 }
 
++ (BOOL)isBuiltInCursor:(NSString *)name {
+    if (!name) return NO;
+    return [name isEqualToString:kDefaultCursorName] ||
+           [name isEqualToString:@"hand"] ||
+           [name isEqualToString:@"text"] ||
+           [name isEqualToString:@"resize_ew"] ||
+           [name isEqualToString:@"resize_ns"];
+}
+
 + (NSString *)cursorPathForName:(NSString *)name {
     NSString *directory = [self cursorsDirectory];
 
