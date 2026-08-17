@@ -279,21 +279,29 @@ static NSString *const kImageGifName = @"image.gif";
 }
 
 + (UIImage *)imageForCursor:(NSString *)name {
+    UIImage * (^loadResourceImage)(NSString *) = ^UIImage *(NSString *fileName) {
+        NSString *path = [[NSBundle mainBundle] pathForResource:[fileName stringByDeletingPathExtension] ofType:[fileName pathExtension]];
+        if (path) {
+            UIImage *img = [UIImage imageWithContentsOfFile:path];
+            if (img) return img;
+        }
+        return [UIImage imageNamed:fileName];
+    };
+
     if ([self isDefaultCursor:name]) {
-        return [UIImage imageNamed:@"MousePointer"];
+        return loadResourceImage(@"MousePointer") ?: [UIImage imageNamed:@"MousePointer"];
     }
-    
     if ([name isEqualToString:@"hand"]) {
-        return [UIImage imageNamed:@"img_mouse_pointer_link.png"] ?: [UIImage imageNamed:@"MousePointer"];
+        return loadResourceImage(@"img_mouse_pointer_link.png") ?: [UIImage imageNamed:@"MousePointer"];
     }
     if ([name isEqualToString:@"text"]) {
-        return [UIImage imageNamed:@"img_mouse_pointer_ibeam.png"] ?: [UIImage imageNamed:@"MousePointer"];
+        return loadResourceImage(@"img_mouse_pointer_ibeam.png") ?: [UIImage imageNamed:@"MousePointer"];
     }
     if ([name isEqualToString:@"resize_ew"]) {
-        return [UIImage imageNamed:@"img_mouse_pointer_resize_ew.png"] ?: [UIImage imageNamed:@"MousePointer"];
+        return loadResourceImage(@"img_mouse_pointer_resize_ew.png") ?: [UIImage imageNamed:@"MousePointer"];
     }
     if ([name isEqualToString:@"resize_ns"]) {
-        return [UIImage imageNamed:@"img_mouse_pointer_resize_ns.png"] ?: [UIImage imageNamed:@"MousePointer"];
+        return loadResourceImage(@"img_mouse_pointer_resize_ns.png") ?: [UIImage imageNamed:@"MousePointer"];
     }
     
     NSString *path = [self imagePathForCursor:name];
@@ -303,6 +311,7 @@ static NSString *const kImageGifName = @"image.gif";
     
     return [UIImage imageNamed:@"MousePointer"];
 }
+
 
 
 + (void)saveImageData:(NSData *)data
