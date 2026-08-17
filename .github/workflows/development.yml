@@ -1,11 +1,6 @@
 name: Development build
 
 on:
-  pull_request:
-    types: [opened, reopened]
-    branches: ['Amethyst-iOS-J25Exp', 'main']
-  push:
-    branches: ['Amethyst-iOS-J25Exp', 'main']
   workflow_dispatch:
 
 jobs:
