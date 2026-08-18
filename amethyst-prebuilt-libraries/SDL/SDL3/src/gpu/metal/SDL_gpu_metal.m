@@ -69,8 +69,6 @@
 
 // Blit Shaders
 
-#include "Metal_Blit.h"
-
 static dispatch_data_t blit_metallib_data = NULL;
 static size_t blit_metallib_size = 0;
 
@@ -4368,10 +4366,28 @@ static void METAL_INTERNAL_InitBlitResources(
     renderer->blitPipelines = SDL_calloc(
         renderer->blitPipelineCapacity, sizeof(BlitPipelineCacheEntry));
 
+    // =========================================================================
+    // NẠP FILE Metal_Blit.metallib TỪ APP BUNDLE
+    // =========================================================================
+    NSString *metallibPath = [[NSBundle mainBundle] pathForResource:@"Metal_Blit" ofType:@"metallib"];
+    if (!metallibPath) {
+        SDL_LogError(SDL_LOG_CATEGORY_GPU, "Failed to find Metal_Blit.metallib in App Bundle!");
+        return;
+    }
+
+    NSData *metallibData = [NSData dataWithContentsOfFile:metallibPath];
+    if (!metallibData) {
+        SDL_LogError(SDL_LOG_CATEGORY_GPU, "Failed to load Metal_Blit.metallib file!");
+        return;
+    }
+
+    const Uint8 *metallibBytes = (const Uint8 *)[metallibData bytes];
+    size_t metallibSize = [metallibData length];
+
     // Fullscreen vertex shader
     SDL_zero(shaderModuleCreateInfo);
-    shaderModuleCreateInfo.code = FullscreenVert_metallib;
-    shaderModuleCreateInfo.code_size = FullscreenVert_metallib_len;
+    shaderModuleCreateInfo.code = metallibBytes;
+    shaderModuleCreateInfo.code_size = metallibSize;
     shaderModuleCreateInfo.stage = SDL_GPU_SHADERSTAGE_VERTEX;
     shaderModuleCreateInfo.format = SDL_GPU_SHADERFORMAT_METALLIB;
     shaderModuleCreateInfo.entrypoint = "FullscreenVert";
@@ -4385,8 +4401,8 @@ static void METAL_INTERNAL_InitBlitResources(
     }
 
     // BlitFrom2D fragment shader
-    shaderModuleCreateInfo.code = BlitFrom2D_metallib;
-    shaderModuleCreateInfo.code_size = BlitFrom2D_metallib_len;
+    shaderModuleCreateInfo.code = metallibBytes;
+    shaderModuleCreateInfo.code_size = metallibSize;
     shaderModuleCreateInfo.stage = SDL_GPU_SHADERSTAGE_FRAGMENT;
     shaderModuleCreateInfo.entrypoint = "BlitFrom2D";
     shaderModuleCreateInfo.num_samplers = 1;
@@ -4401,8 +4417,8 @@ static void METAL_INTERNAL_InitBlitResources(
     }
 
     // BlitFrom2DArray fragment shader
-    shaderModuleCreateInfo.code = BlitFrom2DArray_metallib;
-    shaderModuleCreateInfo.code_size = BlitFrom2DArray_metallib_len;
+    shaderModuleCreateInfo.code = metallibBytes;
+    shaderModuleCreateInfo.code_size = metallibSize;
     shaderModuleCreateInfo.entrypoint = "BlitFrom2DArray";
 
     renderer->blitFrom2DArrayShader = METAL_CreateShader(
@@ -4414,8 +4430,8 @@ static void METAL_INTERNAL_InitBlitResources(
     }
 
     // BlitFrom3D fragment shader
-    shaderModuleCreateInfo.code = BlitFrom3D_metallib;
-    shaderModuleCreateInfo.code_size = BlitFrom3D_metallib_len;
+    shaderModuleCreateInfo.code = metallibBytes;
+    shaderModuleCreateInfo.code_size = metallibSize;
     shaderModuleCreateInfo.entrypoint = "BlitFrom3D";
 
     renderer->blitFrom3DShader = METAL_CreateShader(
@@ -4427,8 +4443,8 @@ static void METAL_INTERNAL_InitBlitResources(
     }
 
     // BlitFromCube fragment shader
-    shaderModuleCreateInfo.code = BlitFromCube_metallib;
-    shaderModuleCreateInfo.code_size = BlitFromCube_metallib_len;
+    shaderModuleCreateInfo.code = metallibBytes;
+    shaderModuleCreateInfo.code_size = metallibSize;
     shaderModuleCreateInfo.entrypoint = "BlitFromCube";
 
     renderer->blitFromCubeShader = METAL_CreateShader(
@@ -4440,8 +4456,8 @@ static void METAL_INTERNAL_InitBlitResources(
     }
 
     // BlitFromCubeArray fragment shader
-    shaderModuleCreateInfo.code = BlitFromCubeArray_metallib;
-    shaderModuleCreateInfo.code_size = BlitFromCubeArray_metallib_len;
+    shaderModuleCreateInfo.code = metallibBytes;
+    shaderModuleCreateInfo.code_size = metallibSize;
     shaderModuleCreateInfo.entrypoint = "BlitFromCubeArray";
 
     renderer->blitFromCubeArrayShader = METAL_CreateShader(
@@ -4487,6 +4503,7 @@ static void METAL_INTERNAL_InitBlitResources(
         SDL_LogError(SDL_LOG_CATEGORY_GPU, "Failed to create blit linear sampler!");
     }
 }
+
 
 static void METAL_INTERNAL_DestroyBlitResources(
     SDL_GPURenderer *driverData)
