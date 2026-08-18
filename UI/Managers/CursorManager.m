@@ -433,18 +433,23 @@ static NSString *const kImageGifName = @"image.gif";
                          withName:(NSString *)name
                              type:(CursorType)type
                             error:(NSError **)error {
-    NSData *data = [NSData dataWithContentsOfURL:url
-                                         options:0
-                                           error:error];
+    if (!url) return nil;
+
+    BOOL accessing = [url startAccessingSecurityScopedResource];
+
+    NSData *data = [NSData dataWithContentsOfURL:url options:0 error:error];
+
+    if (accessing) {
+        [url stopAccessingSecurityScopedResource];
+    }
 
     if (!data) {
         return nil;
     }
 
-    NSString *cursor =
-        [self importCursorFromData:data
-                          withName:name
-                              error:error];
+    NSString *cursor = [self importCursorFromData:data
+                                         withName:name
+                                            error:error];
 
     if (cursor) {
         [self setCursor:cursor type:type];
@@ -452,6 +457,7 @@ static NSString *const kImageGifName = @"image.gif";
 
     return cursor;
 }
+
 
 + (NSString *)importCursorFromImage:(UIImage *)image
                            withName:(NSString *)name
