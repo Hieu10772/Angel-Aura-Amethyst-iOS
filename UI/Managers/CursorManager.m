@@ -77,6 +77,15 @@ static NSString *const kImageGifName = @"image.gif";
     return [directory stringByAppendingPathComponent:name];
 }
 
++ (BOOL)isBuiltInCursor:(NSString *)name {
+    if (!name || name.length == 0) return NO;
+    return [self isDefaultCursor:name] ||
+           [name isEqualToString:@"hand"] || [name isEqualToString:@"HandPointer"] ||
+           [name isEqualToString:@"text"] || [name isEqualToString:@"IBeamPointer"] ||
+           [name isEqualToString:@"resize_ew"] || [name isEqualToString:@"ResizeEWPointer"] ||
+           [name isEqualToString:@"resize_ns"] || [name isEqualToString:@"ResizeNSPointer"];
+}
+
 + (NSArray<NSString *> *)cursorNames {
     NSFileManager *fm = NSFileManager.defaultManager;
     NSArray *content = [fm contentsOfDirectoryAtPath:self.cursorsDirectory error:nil];
