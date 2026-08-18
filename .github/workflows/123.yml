@@ -16,9 +16,10 @@ jobs:
       - name: Compile Metal Shader
         run: |
           cd Amethyst-prebuilt-libraries/SDL/SDL3/src/gpu/metal
-          xcrun -sdk iphoneos metal -c -I. Metal_Blit.metal -o Metal_Blit.air
-          xcrun -sdk iphoneos metallib Metal_Blit.air -o Metal_Blit.metallib
-          ls -lh Metal_Blit.metallib
+          chmod +x compile_shaders.sh
+          ./compile_shaders.sh
+          ls -lh
+
 
       - name: Upload metallib file
         uses: actions/upload-artifact@v4
