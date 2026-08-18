@@ -23,39 +23,21 @@ static NSString *const kImageGifName = @"image.gif";
 
 + (NSString *)cursorsDirectory {
     const char *gameDir = getenv("POJAV_GAME_DIR");
+    NSString *basePath = nil;
 
-    if (!gameDir || gameDir[0] == '\0') {
-        NSLog(@"[CursorManager] ERROR: POJAV_GAME_DIR is not set");
-        return nil;
+    if (gameDir && gameDir[0] != '\0') {
+        basePath = [NSString stringWithUTF8String:gameDir];
+    } else {
+        basePath = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES).firstObject;
     }
 
-    NSString *gamePath = [NSString stringWithUTF8String:gameDir];
-    
-    NSString *instancesPath = [gamePath stringByDeletingLastPathComponent];
+    NSString *instancesPath = [basePath stringByDeletingLastPathComponent];
     NSString *path = [instancesPath stringByAppendingPathComponent:kCursorsDirName];
 
     NSFileManager *fm = NSFileManager.defaultManager;
-    BOOL isDirectory = NO;
-
-    if (![fm fileExistsAtPath:path isDirectory:&isDirectory]) {
-        NSError *error = nil;
-        BOOL created = [fm createDirectoryAtPath:path
-                     withIntermediateDirectories:YES
-                                      attributes:nil
-                                           error:&error];
-
-        if (!created) {
-            NSLog(@"[CursorManager] Failed to create cursors directory: %@",
-                  error.localizedDescription);
-            return nil;
-        }
-    } else if (!isDirectory) {
-        NSLog(@"[CursorManager] ERROR: cursor path exists but is not a directory: %@",
-              path);
-        return nil;
+    if (![fm fileExistsAtPath:path]) {
+        [fm createDirectoryAtPath:path withIntermediateDirectories:YES attributes:nil error:nil];
     }
-
-    NSLog(@"[CursorManager] Cursors directory: %@", path);
     return path;
 }
 
@@ -78,13 +60,25 @@ static NSString *const kImageGifName = @"image.gif";
 }
 
 + (BOOL)isBuiltInCursor:(NSString *)name {
-    if (!name || name.length == 0) return NO;
-    return [self isDefaultCursor:name] ||
-           [name isEqualToString:@"hand"] || [name isEqualToString:@"HandPointer"] ||
-           [name isEqualToString:@"text"] || [name isEqualToString:@"IBeamPointer"] ||
-           [name isEqualToString:@"resize_ew"] || [name isEqualToString:@"ResizeEWPointer"] ||
-           [name isEqualToString:@"resize_ns"] || [name isEqualToString:@"ResizeNSPointer"];
+    if (!name || ![name isKindOfClass:NSString.class] || name.length == 0) {
+        return NO;
+    }
+    
+    static NSArray<NSString *> *builtInNames = nil;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        builtInNames = @[
+            kDefaultCursorName, @"MousePointer",
+            @"hand", @"HandPointer",
+            @"text", @"IBeamPointer",
+            @"resize_ew", @"ResizeEWPointer",
+            @"resize_ns", @"ResizeNSPointer"
+        ];
+    });
+    
+    return [builtInNames containsObject:name];
 }
+
 
 + (NSArray<NSString *> *)cursorNames {
     NSFileManager *fm = NSFileManager.defaultManager;
