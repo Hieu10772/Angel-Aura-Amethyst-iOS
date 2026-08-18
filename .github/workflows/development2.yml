@@ -71,21 +71,23 @@ jobs:
           export BOOTJDK="$JDK_BASE_PATH/bin"
           export SLIMMED=1
           
-          export CODE_SIGNING_ALLOWED=NO
-          export CODE_SIGNING_REQUIRED=NO
-          export CODE_SIGN_IDENTITY=""
-
-          # Ép CFLAGS/CXXFLAGS bỏ qua các lỗi warning về visibility, deprecated và implicit declaration
-          OPTIMIZER_FLAGS="-Wno-error -Wno-visibility -Wno-deprecated-declarations -Wno-error=implicit-function-declaration -Wno-return-type"
-          export CFLAGS="$OPTIMIZER_FLAGS $CFLAGS"
-          export CXXFLAGS="$OPTIMIZER_FLAGS $CXXFLAGS"
-
           SIGN_FLAGS="CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="
-
-          # Giảm xuống -j4 để dễ nhìn log và tránh race condition khi gmake build LTW
-          gmake -j4 dsym package PLATFORM=2 $SIGN_FLAGS 2> >(grep -v "vtool warning: code signature will be invalid" >&2)
           
-          gmake -j4 dsym package PLATFORM=2 TROLLSTORE_JIT_ENT=1 $SIGN_FLAGS 2> >(grep -v "vtool warning: code signature will be invalid" >&2)
+          # Cờ ép Clang/GCC bỏ qua các lỗi gắt của Xcode 15 trên glsl_optimizer & LTW
+          C_EXTRA_FLAGS="-Wno-error -Wno-implicit-function-declaration -Wno-visibility -Wno-deprecated-declarations -Wno-return-type"
+
+          # 1. Build Sideload IPA (truyền CFLAGS/CXXFLAGS trực tiếp vào gmake)
+          gmake -j2 dsym package PLATFORM=2 $SIGN_FLAGS \
+            CFLAGS="$C_EXTRA_FLAGS" \
+            CXXFLAGS="$C_EXTRA_FLAGS" \
+            2> >(grep -v "vtool warning: code signature will be invalid" >&2)
+          
+          # 2. Build TrollStore tIPA
+          gmake -j2 dsym package PLATFORM=2 TROLLSTORE_JIT_ENT=1 $SIGN_FLAGS \
+            CFLAGS="$C_EXTRA_FLAGS" \
+            CXXFLAGS="$C_EXTRA_FLAGS" \
+            2> >(grep -v "vtool warning: code signature will be invalid" >&2)
+
 
       - name: List artifacts
         if: always()
