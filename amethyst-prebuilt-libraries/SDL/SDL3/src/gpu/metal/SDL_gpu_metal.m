@@ -28,6 +28,7 @@
 
 #include "../SDL_sysgpu.h"
 
+
 // Defines
 
 #define METAL_FIRST_VERTEX_BUFFER_SLOT 14
@@ -69,6 +70,9 @@
 // Blit Shaders
 
 #include "Metal_Blit.h"
+
+static dispatch_data_t blit_metallib_data = NULL;
+static size_t blit_metallib_size = 0;
 
 // Forward Declarations
 
