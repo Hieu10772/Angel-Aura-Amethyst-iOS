@@ -393,12 +393,10 @@ int launchJVMWithArgs(NSString *username, id launchTarget, int width, int height
         getEntitlementValue(@"com.apple.security.cs.disable-library-validation"));
 
     if (getPrefBool(@"java.auto_ram")) {
-        // Đặt thẳng tỉ lệ Auto RAM lên 40% RAM máy (thay vì bị bóp xuống 25%)
         CGFloat autoRatio = 0.4;
         allocmem = roundf((NSProcessInfo.processInfo.physicalMemory / 1048576) * autoRatio);
         allocmem = capAllocationToJetsamAllowance(allocmem);
     } else {
-        // Lấy chính xác dung lượng RAM em đã chỉnh thủ công
         allocmem = getPrefInt(@"java.allocated_memory");
         
     }
