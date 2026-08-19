@@ -13,14 +13,30 @@ CFTypeRef SecTaskCopyValueForEntitlement(void* task, NSString* entitlement, CFEr
 void* SecTaskCreateFromSelf(CFAllocatorRef allocator);
 
 BOOL getEntitlementValue(NSString *key) {
-    void *secTask = SecTaskCreateFromSelf(NULL);
-    CFTypeRef value = SecTaskCopyValueForEntitlement(SecTaskCreateFromSelf(NULL), key, nil);
-    CFRelease(secTask);
-    if (value == nil) {
+    SecTaskRef task = SecTaskCreateFromSelf(NULL);
+    if (task == NULL) {
         return NO;
     }
+
+    CFTypeRef value = SecTaskCopyValueForEntitlement(task, (__bridge CFStringRef)key, NULL);
+    CFRelease(task);
+
+    if (value == NULL) {
+        return NO;
+    }
+
+    BOOL result = YES;
+
+    if (CFGetTypeID(value) == CFBooleanGetTypeID()) {
+        result = CFBooleanGetValue((CFBooleanRef)value);
+    } else if (CFGetTypeID(value) == CFNumberGetTypeID()) {
+        int number = 0;
+        CFNumberGetValue((CFNumberRef)value, kCFNumberIntType, &number);
+        result = number != 0;
+    }
+
     CFRelease(value);
-    return ![(__bridge id)value isKindOfClass:NSNumber.class] || [(__bridge id)value boolValue];
+    return result;
 }
 
 BOOL isJITEnabled(BOOL checkCSFlags) {
