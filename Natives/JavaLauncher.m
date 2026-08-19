@@ -52,18 +52,40 @@ static size_t availableMemoryMB(void) {
 // always fit under the real Jetsam kill allowance. Returns the capped value.
 static int capAllocationToJetsamAllowance(int allocmem) {
     if (getEntitlementValue(@"com.apple.private.memorystatus")) {
-        // updateJetsamControl() raised the task limit itself, no cap needed.
         return allocmem;
     }
+
     size_t availableMem = availableMemoryMB();
-    if (availableMem > 0) {
-        int byAllowance = (int)((double)availableMem * 0.6);
-        if (byAllowance < allocmem) {
-            NSLog(@"[JavaLauncher] RAM capped: %d MB -> %d MB (only %zu MB left before the Jetsam kill limit; add the memorystatus entitlement to raise it)",
-                  allocmem, byAllowance, availableMem);
-            return (int)MAX(384, byAllowance);
-        }
+
+    if (availableMem == 0) {
+        return allocmem;
     }
+
+    const int reserveMB = 512;
+
+    if ((int)availableMem <= reserveMB + 384) {
+        return 384;
+    }
+
+    int safeHeap = (int)availableMem - reserveMB;
+    safeHeap = (int)((double)safeHeap * 0.80);
+
+    if (safeHeap < 384) {
+        safeHeap = 384;
+    }
+
+    if (safeHeap < allocmem) {
+        NSLog(
+            @"[JavaLauncher] RAM capped: %d MB -> %d MB "
+            "(available Jetsam memory: %zu MB)",
+            allocmem,
+            safeHeap,
+            availableMem
+        );
+
+        return safeHeap;
+    }
+
     return allocmem;
 }
 
@@ -407,13 +429,30 @@ int launchJVMWithArgs(NSString *username, id launchTarget, int width, int height
         getEntitlementValue(@"com.apple.developer.kernel.extended-virtual-addressing"),
         getEntitlementValue(@"com.apple.security.cs.disable-library-validation"));
     if (getPrefBool(@"java.auto_ram")) {
-        CGFloat autoRatio = getEntitlementValue(@"com.apple.private.memorystatus") ? 0.4 : 0.25;
-        allocmem = roundf((NSProcessInfo.processInfo.physicalMemory / 1048576) * autoRatio);
-        // Auto sizing is derived from physical RAM, not from the process's
-        // Jetsam allowance, so it can over-allocate on sideloaded installs
-        // (no memorystatus entitlement) where the kill limit is fixed and
-        // low. Keep the allowance cap here to prevent launch-time Jetsam kills.
-        allocmem = capAllocationToJetsamAllowance(allocmem);
+    size_t availableMem = availableMemoryMB();
+
+    if (availableMem > 0) {
+        // Reserve memory for JVM native, LWJGL, OpenGL/Metal, UI, etc.
+        const int nativeReserveMB = 512;
+
+        if ((int)availableMem > nativeReserveMB + 384) {
+            allocmem = (int)availableMem - nativeReserveMB;
+
+            // Avoid using 100% of the available Jetsam budget.
+            allocmem = (int)((double)allocmem * 0.80);
+
+            if (allocmem < 384) {
+                allocmem = 384;
+            }
+        } else {
+            allocmem = 384;
+        }
+    } else {
+        // Fallback
+        allocmem = (int)roundf(
+            (NSProcessInfo.processInfo.physicalMemory / 1048576) * 0.25
+        );
+    }
     } else {
         // Manual allocation: honor the user's setting as-is. The JVM commits
         // heap lazily (ParallelGC), so -Xmx is a ceiling, not a preallocation.
