@@ -94,7 +94,7 @@ dispatch_async(dispatch_get_main_queue(), ^{
     NSMutableParagraphStyle *style = [[NSMutableParagraphStyle alloc] init];
     style.alignment = NSTextAlignmentLeft;
 
-    NSMutableAttributedString *atrStr = [[NSMutableAttributedString alloc] initWithString:message_o attributes:@{NSParagraphStyleAttributeName:style,NSFontAttributeName:[UIFont systemFontOfSize:13.0]}];
+    NSMutableAttributedString *atrStr = [[NSMutableAttributedString alloc] initWithString:message_o attributes:@{NSParagraphStyleAttributeName:style,NSFontAttributeName:[UIFont systemFontOfSize:13]}];
 
     [alert setValue:atrStr forKey:@"attributedMessage"];
 
@@ -129,9 +129,10 @@ jstring UIKit_accessClipboard(JNIEnv* env, jint action, jbyteArray copySrc) {
         }
     } else if (action == CLIPBOARD_COPY) {
         // copy request
-        const char* copySrcC = (*env)->GetByteArrayElements(env, copySrc, 0);
+        jbyte *copySrcC = (*env)->GetByteArrayElements(env, copySrc, NULL);
         if (copySrcC) {
-            UIPasteboard.generalPasteboard.string = @(copySrcC);
+            NSString *s = [NSString stringWithUTF8String:(const char *)copySrcC];
+            UIPasteboard.generalPasteboard.string = s;
             (*env)->ReleaseByteArrayElements(env, copySrc, copySrcC, 0);
         }
         return NULL;
