@@ -1,6 +1,14 @@
 #import <SafariServices/SafariServices.h>
+
+#if __has_include(<Security/SecTask.h>)
 #import <Security/SecTask.h>
+#else
 #import <Security/Security.h>
+/* Minimal fallback declarations when SecTask.h is not available in the SDK */
+typedef struct __SecTask *SecTaskRef;
+CFTypeRef SecTaskCopyValueForEntitlement(SecTaskRef task, CFStringRef entitlement, CFErrorRef _Nullable *error);
+SecTaskRef SecTaskCreateFromSelf(CFAllocatorRef allocator);
+#endif
 
 #include "jni.h"
 #include <dlfcn.h>
