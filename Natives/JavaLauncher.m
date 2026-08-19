@@ -431,6 +431,18 @@ int launchJVMWithArgs(NSString *username, id launchTarget, int width, int height
     if (getPrefBool(@"java.auto_ram")) {
     size_t availableMem = availableMemoryMB();
 
+    NSLog(@"[RAM DEBUG] physicalMemory = %.0f MB",
+          NSProcessInfo.processInfo.physicalMemory / (1024.0 * 1024.0));
+
+    NSLog(@"[RAM DEBUG] os_proc_available_memory = %zu MB",
+          availableMem);
+
+    NSLog(@"[RAM DEBUG] memorystatus entitlement = %d",
+          getEntitlementValue(@"com.apple.private.memorystatus"));
+
+    NSLog(@"[RAM DEBUG] increased-memory-limit entitlement = %d",
+          getEntitlementValue(@"com.apple.developer.kernel.increased-memory-limit"));
+
     if (availableMem > 0) {
         // Reserve memory for JVM native, LWJGL, OpenGL/Metal, UI, etc.
         const int nativeReserveMB = 512;
