@@ -1,5 +1,6 @@
 #include <mach/mach.h>
 #include <mach/task.h>
+#include <os/proc.h>
 #include <dirent.h>
 #include <dlfcn.h>
 #include <errno.h>
@@ -22,57 +23,8 @@
 #import "PLProfiles.h"
 #import "VersionDirectoryManager.h"
 #import "TouchControllerManager.h"
-#import "UZKArchive.h"
 
 static NSString *dhNativeLibPath = nil;
-
-static BOOL setupJnaNativeLibrary(NSString *jnaTmpDir) {
-    NSFileManager *fm = NSFileManager.defaultManager;
-    NSString *dst = [jnaTmpDir stringByAppendingPathComponent:@"libjnidispatch.dylib"];
-    [fm removeItemAtPath:dst error:nil];
-
-    NSArray<NSString *> *jnaJarCandidates = @[
-        [NSString stringWithFormat:@"%s/libraries/net/java/dev/jna/jna/5.13.0/jna-5.13.0.jar", getenv("POJAV_GAME_DIR")],
-        [NSBundle.mainBundle.bundlePath stringByAppendingPathComponent:@"libs/jna-5.13.0.jar"],
-    ];
-    NSArray<NSString *> *nativeEntries = @[
-        @"com/sun/jna/darwin-aarch64/libjnidispatch.jnilib",
-        @"com/sun/jna/darwin/libjnidispatch.jnilib",
-    ];
-
-    for (NSString *jarPath in jnaJarCandidates) {
-        if (![fm fileExistsAtPath:jarPath]) {
-            continue;
-        }
-        UZKArchive *archive = [[UZKArchive alloc] initWithPath:jarPath error:nil];
-        if (!archive) {
-            continue;
-        }
-        for (NSString *entry in nativeEntries) {
-            NSError *extractError = nil;
-            NSData *nativeData = [archive extractDataFromFile:entry error:&extractError];
-            if (!nativeData) {
-                continue;
-            }
-            if ([nativeData writeToFile:dst options:NSDataWritingAtomic error:&extractError]) {
-                NSLog(@"[JavaLauncher] Extracted JNA native from %@ (%@)", jarPath.lastPathComponent, entry);
-                return YES;
-            }
-            NSLog(@"[JavaLauncher] Failed writing JNA native: %@", extractError.localizedDescription);
-        }
-    }
-
-    NSString *frameworkSrc = [NSBundle.mainBundle.bundlePath stringByAppendingPathComponent:@"Frameworks/libjnidispatch.dylib"];
-    if ([fm fileExistsAtPath:frameworkSrc]) {
-        NSError *copyError = nil;
-        if ([fm copyItemAtPath:frameworkSrc toPath:dst error:&copyError]) {
-            NSLog(@"[JavaLauncher] Copied libjnidispatch.dylib from Frameworks to %@", jnaTmpDir);
-            return YES;
-        }
-        NSLog(@"[JavaLauncher] Failed copying libjnidispatch.dylib: %@", copyError.localizedDescription);
-    }
-    return NO;
-}
 
 // Forward declaration for DH fix
 static void checkAndAddDhNativeLibPath(NSString *versionId);
@@ -80,6 +32,40 @@ static void checkAndAddDhNativeLibPath(NSString *versionId);
 #define fm NSFileManager.defaultManager
 
 extern char **environ;
+
+// os_proc_available_memory() returns the bytes remaining before the current
+// process hits its dirty memory (Jetsam) limit — the actual kill limit the
+// OS applies to this process, unlike physical RAM or host free pages.
+// Non-jailbroken apps run under a fixed, dynamically-shrinking Jetsam limit;
+// when the process is JIT-debugged without the memorystatus entitlement, iOS
+// pins that limit at roughly 1GB regardless of the device, which is exactly
+// the "crash at 1GB on every device" symptom.
+static size_t availableMemoryMB(void) {
+    size_t avail = os_proc_available_memory();
+    if (avail == 0) {
+        return 0;
+    }
+    return (size_t)(avail / (1024 * 1024));
+}
+
+// Caps the requested heap so Java + JVM overhead + native GL/Metal buffers
+// always fit under the real Jetsam kill allowance. Returns the capped value.
+static int capAllocationToJetsamAllowance(int allocmem) {
+    if (getEntitlementValue(@"com.apple.private.memorystatus")) {
+        // updateJetsamControl() raised the task limit itself, no cap needed.
+        return allocmem;
+    }
+    size_t availableMem = availableMemoryMB();
+    if (availableMem > 0) {
+        int byAllowance = (int)((double)availableMem * 0.6);
+        if (byAllowance < allocmem) {
+            NSLog(@"[JavaLauncher] RAM capped: %d MB -> %d MB (only %zu MB left before the Jetsam kill limit; add the memorystatus entitlement to raise it)",
+                  allocmem, byAllowance, availableMem);
+            return (int)MAX(384, byAllowance);
+        }
+    }
+    return allocmem;
+}
 
 BOOL validateVirtualMemorySpace(size_t size) {
     size <<= 20; // convert to MB
@@ -362,11 +348,20 @@ int launchJVMWithArgs(NSString *username, id launchTarget, int width, int height
     NSLog(@"[JavaLauncher] RENDERER is set to %@\n", renderer);
     setenv("AMETHYST_RENDERER", renderer.UTF8String, 1);
 
-    // Apply Zink (cũ) environment only for the legacy renderer
-    if ([renderer isEqualToString:@ RENDERER_NAME_VK_ZINK_LEGACY]) {
-        [ZinkConfig applyZinkLegacyEnvironmentFromPreferences];
-        NSString *configSummary = [ZinkConfig activeLegacyConfigSummary];
-        NSLog(@"[ZinkConfig] ========== Zink Legacy Renderer Active ==========");
+    // The TouchController mod (0.3.1-alpha13+) only activates its iOS
+    // platform when TOUCH_CONTROLLER_PROXY_SOCKET is set. It must be set
+    // BEFORE the JVM starts: the JVM snapshots the environment at boot and
+    // later setenv() calls are invisible to System.getenv(). The value is
+    // not a real socket path (the transport is an in-process ring buffer),
+    // so any non-empty value works; harmless when no mod is installed.
+    setenv("TOUCH_CONTROLLER_PROXY_SOCKET", "inproc:touchcontroller", 1);
+    NSLog(@"[JavaLauncher] TOUCH_CONTROLLER_PROXY_SOCKET set before JVM launch");
+
+    // Apply Zink-specific environment variables if Zink renderer is selected
+    if ([renderer hasPrefix:@"libOSMesa"]) {
+        [ZinkConfig applyZinkEnvironmentFromPreferences];
+        NSString *configSummary = [ZinkConfig activeConfigSummary];
+        NSLog(@"[ZinkConfig] ========== Zink Renderer Active ==========");
         NSLog(@"[ZinkConfig] %@", configSummary);
         setenv("ZINK_ACTIVE_CONFIG", configSummary.UTF8String, 1);
     }
@@ -406,11 +401,34 @@ int launchJVMWithArgs(NSString *username, id launchTarget, int width, int height
     }
 
     int allocmem;
+    NSLog(@"[JavaLauncher] Entitlements: memorystatus=%d increased-memory-limit=%d extended-virtual-addressing=%d disable-library-validation=%d",
+        getEntitlementValue(@"com.apple.private.memorystatus"),
+        getEntitlementValue(@"com.apple.developer.kernel.increased-memory-limit"),
+        getEntitlementValue(@"com.apple.developer.kernel.extended-virtual-addressing"),
+        getEntitlementValue(@"com.apple.security.cs.disable-library-validation"));
     if (getPrefBool(@"java.auto_ram")) {
         CGFloat autoRatio = getEntitlementValue(@"com.apple.private.memorystatus") ? 0.4 : 0.25;
         allocmem = roundf((NSProcessInfo.processInfo.physicalMemory / 1048576) * autoRatio);
+        // Auto sizing is derived from physical RAM, not from the process's
+        // Jetsam allowance, so it can over-allocate on sideloaded installs
+        // (no memorystatus entitlement) where the kill limit is fixed and
+        // low. Keep the allowance cap here to prevent launch-time Jetsam kills.
+        allocmem = capAllocationToJetsamAllowance(allocmem);
     } else {
+        // Manual allocation: honor the user's setting as-is. The JVM commits
+        // heap lazily (ParallelGC), so -Xmx is a ceiling, not a preallocation.
+        // Just warn when the requested heap exceeds the actual Jetsam kill
+        // allowance so the user knows a memory-heavy session may be killed.
         allocmem = getPrefInt(@"java.allocated_memory");
+        if (!getEntitlementValue(@"com.apple.private.memorystatus")) {
+            size_t availableMem = availableMemoryMB();
+            if (availableMem > 0 && (size_t)allocmem > availableMem) {
+                NSLog(@"[JavaLauncher] Warning: requested %d MB heap exceeds the Jetsam kill allowance (~%zu MB); the game may be killed when its memory usage approaches the limit", allocmem, availableMem);
+                showDialog(localize(@"Warning", nil),
+                    [NSString stringWithFormat:@"You requested %d MB RAM, but the kill limit (Jetsam) of a Sideloaded install is only about %zu MB. Memory above this force-closes the game mid-play. Use Auto RAM or set a value below %zu MB.",
+                        allocmem, availableMem, availableMem]);
+            }
+        }
     }
     NSLog(@"[JavaLauncher] Max RAM allocation is set to %d MB", allocmem);
     if (!validateVirtualMemorySpace(allocmem)) {
@@ -444,10 +462,6 @@ int launchJVMWithArgs(NSString *username, id launchTarget, int width, int height
     } else if ([lwjglVersion isEqualToString:@"3.3.6"]) {
         javaLibraryPath = [NSString stringWithFormat:@"%@:%@",
             [NSBundle.mainBundle.bundlePath stringByAppendingPathComponent:@"libs/lwjgl36_natives"],
-            javaLibraryPath];
-    } else if ([lwjglVersion isEqualToString:@"3.3.1"]) {
-        javaLibraryPath = [NSString stringWithFormat:@"%@:%@",
-            [NSBundle.mainBundle.bundlePath stringByAppendingPathComponent:@"libs/lwjgl31_natives"],
             javaLibraryPath];
     } else {
         javaLibraryPath = [NSString stringWithFormat:@"%@:%@",
@@ -553,19 +567,16 @@ int launchJVMWithArgs(NSString *username, id launchTarget, int width, int height
     margv[++margc] = "-Dfml.earlyprogresswindow=false";
 
     // JNA on iOS must load libjnidispatch from jna.boot.library.path
-    // (jna.nosys=true). Extract the 5.13.0 native from the JNA jar so the
-    // version always matches the bundled Java library (stale jna_tmp copies
-    // caused "Expected 6.1.6, Found 7.0.4" errors).
+    // (jna.nosys=true), so pre-copy the bundled 5.13.0 dylib into jna_tmp.
+    // POJAV_HOME/jna_tmp is what PojavLauncher.main points jna.boot.library.path at.
     NSString *jnaTmpDir = [NSString stringWithFormat:@"%s/jna_tmp", getenv("POJAV_HOME")];
     [fm createDirectoryAtPath:jnaTmpDir withIntermediateDirectories:YES attributes:nil error:nil];
-    if (!setupJnaNativeLibrary(jnaTmpDir)) {
-        NSLog(@"[JavaLauncher] Warning: could not prepare libjnidispatch.dylib in jna_tmp");
+    NSString *jnidispatchSrc = [NSBundle.mainBundle.bundlePath stringByAppendingPathComponent:@"Frameworks/libjnidispatch.dylib"];
+    NSString *jnidispatchDst = [jnaTmpDir stringByAppendingPathComponent:@"libjnidispatch.dylib"];
+    if ([fm fileExistsAtPath:jnidispatchSrc] && ![fm fileExistsAtPath:jnidispatchDst]) {
+        NSLog(@"[JavaLauncher] Copying libjnidispatch.dylib to %@", jnidispatchDst);
+        [fm copyItemAtPath:jnidispatchSrc toPath:jnidispatchDst error:nil];
     }
-    margv[++margc] = "-Djna.nosys=true";
-    margv[++margc] = "-Djna.nounpack=true";
-    margv[++margc] = "-Djna.noclassinit=true";
-    margv[++margc] = [NSString stringWithFormat:@"-Djna.tmpdir=%@", jnaTmpDir].UTF8String;
-    margv[++margc] = [NSString stringWithFormat:@"-Djna.boot.library.path=%@", jnaTmpDir].UTF8String;
 
     // Load java
     NSString *libjlipath8 = [NSString stringWithFormat:@"%@/lib/jli/libjli.dylib", javaHome]; // java 8
@@ -659,9 +670,6 @@ int launchJVMWithArgs(NSString *username, id launchTarget, int width, int height
         lwjglJarPath = [lwjglDirPath stringByAppendingPathComponent:@"lwjgl.jar"];
     } else if ([lwjglVersion isEqualToString:@"3.3.6"]) {
         lwjglDirPath = [librariesPath stringByAppendingPathComponent:@"lwjgl36"];
-        lwjglJarPath = [lwjglDirPath stringByAppendingPathComponent:@"lwjgl.jar"];
-    } else if ([lwjglVersion isEqualToString:@"3.3.1"]) {
-        lwjglDirPath = [librariesPath stringByAppendingPathComponent:@"lwjgl31"];
         lwjglJarPath = [lwjglDirPath stringByAppendingPathComponent:@"lwjgl.jar"];
     } else {
         lwjglDirPath = [librariesPath stringByAppendingPathComponent:@"lwjgl33"];
