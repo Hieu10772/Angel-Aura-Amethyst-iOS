@@ -1,15 +1,5 @@
 #import <SafariServices/SafariServices.h>
 
-#if __has_include(<Security/SecTask.h>)
-#import <Security/SecTask.h>
-#else
-#import <Security/Security.h>
-/* Minimal fallback declarations when SecTask.h is not available in the SDK */
-typedef struct __SecTask *SecTaskRef;
-CFTypeRef SecTaskCopyValueForEntitlement(SecTaskRef task, CFStringRef entitlement, CFErrorRef _Nullable *error);
-SecTaskRef SecTaskCreateFromSelf(CFAllocatorRef allocator);
-#endif
-
 #include "jni.h"
 #include <dlfcn.h>
 #include <stdio.h>
@@ -19,31 +9,18 @@ SecTaskRef SecTaskCreateFromSelf(CFAllocatorRef allocator);
 
 #include "utils.h"
 
+CFTypeRef SecTaskCopyValueForEntitlement(void* task, NSString* entitlement, CFErrorRef  _Nullable *error);
+void* SecTaskCreateFromSelf(CFAllocatorRef allocator);
+
 BOOL getEntitlementValue(NSString *key) {
-    SecTaskRef task = SecTaskCreateFromSelf(NULL);
-    if (task == NULL) {
+    void *secTask = SecTaskCreateFromSelf(NULL);
+    CFTypeRef value = SecTaskCopyValueForEntitlement(SecTaskCreateFromSelf(NULL), key, nil);
+    CFRelease(secTask);
+    if (value == nil) {
         return NO;
     }
-
-    CFTypeRef value = SecTaskCopyValueForEntitlement(task, (__bridge CFStringRef)key, NULL);
-    CFRelease(task);
-
-    if (value == NULL) {
-        return NO;
-    }
-
-    BOOL result = YES;
-
-    if (CFGetTypeID(value) == CFBooleanGetTypeID()) {
-        result = CFBooleanGetValue((CFBooleanRef)value);
-    } else if (CFGetTypeID(value) == CFNumberGetTypeID()) {
-        int number = 0;
-        CFNumberGetValue((CFNumberRef)value, kCFNumberIntType, &number);
-        result = number != 0;
-    }
-
     CFRelease(value);
-    return result;
+    return ![(__bridge id)value isKindOfClass:NSNumber.class] || [(__bridge id)value boolValue];
 }
 
 BOOL isJITEnabled(BOOL checkCSFlags) {
@@ -100,14 +77,14 @@ NSMutableDictionary* parseJSONFromFile(NSString *path) {
     NSString *content = [NSString stringWithContentsOfFile:path encoding:NSUTF8StringEncoding error:&error];
     if (content == nil) {
         NSLog(@"[ParseJSON] Error: could not read %@: %@", path, error.localizedDescription);
-        return (@{"NSErrorObject": error}.mutableCopy);
+        return @{@"NSErrorObject": error}.mutableCopy;
     }
 
     NSData* data = [content dataUsingEncoding:NSUTF8StringEncoding];
     NSMutableDictionary *dict = [NSJSONSerialization JSONObjectWithData:data options:NSJSONReadingMutableContainers error:&error];
     if (error) {
         NSLog(@"[ParseJSON] Error: could not parse JSON: %@", error.localizedDescription);
-        return (@{"NSErrorObject": error}.mutableCopy);
+        return @{@"NSErrorObject": error}.mutableCopy;
     }
     return dict;
 }
