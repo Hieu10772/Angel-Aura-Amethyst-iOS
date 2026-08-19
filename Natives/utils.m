@@ -1,4 +1,6 @@
 #import <SafariServices/SafariServices.h>
+#import <Security/SecTask.h>
+#import <Security/Security.h>
 
 #include "jni.h"
 #include <dlfcn.h>
@@ -8,9 +10,6 @@
 #include <dirent.h>
 
 #include "utils.h"
-
-CFTypeRef SecTaskCopyValueForEntitlement(void* task, NSString* entitlement, CFErrorRef  _Nullable *error);
-void* SecTaskCreateFromSelf(CFAllocatorRef allocator);
 
 BOOL getEntitlementValue(NSString *key) {
     SecTaskRef task = SecTaskCreateFromSelf(NULL);
@@ -93,14 +92,14 @@ NSMutableDictionary* parseJSONFromFile(NSString *path) {
     NSString *content = [NSString stringWithContentsOfFile:path encoding:NSUTF8StringEncoding error:&error];
     if (content == nil) {
         NSLog(@"[ParseJSON] Error: could not read %@: %@", path, error.localizedDescription);
-        return @{@"NSErrorObject": error}.mutableCopy;
+        return (@{"NSErrorObject": error}.mutableCopy);
     }
 
     NSData* data = [content dataUsingEncoding:NSUTF8StringEncoding];
     NSMutableDictionary *dict = [NSJSONSerialization JSONObjectWithData:data options:NSJSONReadingMutableContainers error:&error];
     if (error) {
         NSLog(@"[ParseJSON] Error: could not parse JSON: %@", error.localizedDescription);
-        return @{@"NSErrorObject": error}.mutableCopy;
+        return (@{"NSErrorObject": error}.mutableCopy);
     }
     return dict;
 }
