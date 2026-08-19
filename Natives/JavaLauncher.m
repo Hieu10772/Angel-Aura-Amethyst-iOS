@@ -33,13 +33,6 @@ static void checkAndAddDhNativeLibPath(NSString *versionId);
 
 extern char **environ;
 
-// os_proc_available_memory() returns the bytes remaining before the current
-// process hits its dirty memory (Jetsam) limit — the actual kill limit the
-// OS applies to this process, unlike physical RAM or host free pages.
-// Non-jailbroken apps run under a fixed, dynamically-shrinking Jetsam limit;
-// when the process is JIT-debugged without the memorystatus entitlement, iOS
-// pins that limit at roughly 1GB regardless of the device, which is exactly
-// the "crash at 1GB on every device" symptom.
 static size_t availableMemoryMB(void) {
     size_t avail = os_proc_available_memory();
     if (avail == 0) {
@@ -49,6 +42,16 @@ static size_t availableMemoryMB(void) {
 }
 
 static int capAllocationToJetsamAllowance(int allocmem) {
+    size_t availMB = availableMemoryMB();
+    if (availMB > 0) {
+        int safeLimitMB = (int)availMB - 250;
+        if (safeLimitMB < 256) safeLimitMB = 256;
+        
+        if (allocmem > safeLimitMB) {
+            NSLog(@"[JavaLauncher] Jetsam cap applied: reducing allocation from %d MB to safe limit %d MB (Available: %zu MB)", allocmem, safeLimitMB, availMB);
+            return safeLimitMB;
+        }
+    }
     return allocmem;
 }
 
@@ -386,6 +389,9 @@ int launchJVMWithArgs(NSString *username, id launchTarget, int width, int height
     }
 
     int allocmem;
+    BOOL hasMemoryEntitlement = getEntitlementValue(@"com.apple.private.memorystatus") ||
+                                getEntitlementValue(@"com.apple.developer.kernel.increased-memory-limit");
+
     NSLog(@"[JavaLauncher] Entitlements: memorystatus=%d increased-memory-limit=%d extended-virtual-addressing=%d disable-library-validation=%d",
         getEntitlementValue(@"com.apple.private.memorystatus"),
         getEntitlementValue(@"com.apple.developer.kernel.increased-memory-limit"),
@@ -393,12 +399,14 @@ int launchJVMWithArgs(NSString *username, id launchTarget, int width, int height
         getEntitlementValue(@"com.apple.security.cs.disable-library-validation"));
 
     if (getPrefBool(@"java.auto_ram")) {
-        CGFloat autoRatio = 0.4;
+        // Sử dụng tỷ lệ 0.25 nếu không có Entitlement mở rộng RAM (giữ bộ nhớ JVM < 750MB)
+        CGFloat autoRatio = hasMemoryEntitlement ? 0.4 : 0.25;
         allocmem = roundf((NSProcessInfo.processInfo.physicalMemory / 1048576) * autoRatio);
         allocmem = capAllocationToJetsamAllowance(allocmem);
     } else {
         allocmem = getPrefInt(@"java.allocated_memory");
-        
+        // Kiểm tra trần Jetsam kể cả khi người dùng tự chỉnh RAM thủ công
+        allocmem = capAllocationToJetsamAllowance(allocmem);
     }
 
     NSLog(@"[JavaLauncher] Max RAM allocation is set to %d MB", allocmem);
@@ -701,14 +709,6 @@ int launchJVMWithArgs(NSString *username, id launchTarget, int width, int height
 }
 
 // ==================== Distant Horizons Native Library Fix ====================
-// On iOS, DH mod extracts libzstd-jni_dh-1.5.7-6.dylib to a temp directory,
-// but the relocation process invalidates the code signature, causing crash.
-// Fix: Pre-extract the library from DH jar, sign it with ad-hoc signature,
-// and add its directory to java.library.path
-
-// This function checks if the library exists and is signed; if not, it will
-// be handled by the Java side (Tools.java) via extractDhNativeLibraries()
-// We just check here and add the path if available.
 static void checkAndAddDhNativeLibPath(NSString *versionId) {
     if (!versionId) return;
     
@@ -720,7 +720,6 @@ static void checkAndAddDhNativeLibPath(NSString *versionId) {
         dhNativeLibPath = extractDir;
         NSLog(@"[DH Fix] Adding native library path: %@", dhNativeLibPath);
     } else {
-        // Will be extracted by Java side before JVM launch
         dhNativeLibPath = extractDir;
         NSLog(@"[DH Fix] Will use native library path: %@ (extraction by Java)", dhNativeLibPath);
     }
