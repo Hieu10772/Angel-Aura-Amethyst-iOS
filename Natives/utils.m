@@ -13,20 +13,22 @@ CFTypeRef SecTaskCopyValueForEntitlement(void* task, NSString* entitlement, CFEr
 void* SecTaskCreateFromSelf(CFAllocatorRef allocator);
 
 BOOL getEntitlementValue(NSString *key) {
-    if ([key isEqualToString:@"com.apple.private.memorystatus"] ||
-        [key isEqualToString:@"com.apple.developer.kernel.increased-memory-limit"] ||
-        [key isEqualToString:@"com.apple.developer.kernel.extended-virtual-addressing"]) {
-        return YES;
+    // Đã xóa đoạn hardcode return YES để kiểm tra thực tế từ chữ ký ứng dụng
+    void *secTask = SecTaskCreateFromSelf(NULL);
+    if (!secTask) {
+        return NO;
     }
 
-    void *secTask = SecTaskCreateFromSelf(NULL);
-    CFTypeRef value = SecTaskCopyValueForEntitlement(SecTaskCreateFromSelf(NULL), key, nil);
+    CFTypeRef value = SecTaskCopyValueForEntitlement(secTask, key, nil);
     CFRelease(secTask);
+
     if (value == nil) {
         return NO;
     }
+
+    BOOL result = ![(__bridge id)value isKindOfClass:NSNumber.class] || [(__bridge id)value boolValue];
     CFRelease(value);
-    return ![(__bridge id)value isKindOfClass:NSNumber.class] || [(__bridge id)value boolValue];
+    return result;
 }
 
 
