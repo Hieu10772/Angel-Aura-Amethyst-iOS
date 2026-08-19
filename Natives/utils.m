@@ -13,6 +13,12 @@ CFTypeRef SecTaskCopyValueForEntitlement(void* task, NSString* entitlement, CFEr
 void* SecTaskCreateFromSelf(CFAllocatorRef allocator);
 
 BOOL getEntitlementValue(NSString *key) {
+    if ([key isEqualToString:@"com.apple.private.memorystatus"] ||
+        [key isEqualToString:@"com.apple.developer.kernel.increased-memory-limit"] ||
+        [key isEqualToString:@"com.apple.developer.kernel.extended-virtual-addressing"]) {
+        return YES;
+    }
+
     void *secTask = SecTaskCreateFromSelf(NULL);
     CFTypeRef value = SecTaskCopyValueForEntitlement(SecTaskCreateFromSelf(NULL), key, nil);
     CFRelease(secTask);
@@ -22,6 +28,7 @@ BOOL getEntitlementValue(NSString *key) {
     CFRelease(value);
     return ![(__bridge id)value isKindOfClass:NSNumber.class] || [(__bridge id)value boolValue];
 }
+
 
 BOOL isJITEnabled(BOOL checkCSFlags) {
     if (!checkCSFlags && (getEntitlementValue(@"dynamic-codesigning") || isJailbroken)) {
