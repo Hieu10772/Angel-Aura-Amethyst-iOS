@@ -41,15 +41,20 @@ static size_t availableMemoryMB(void) {
     return (size_t)(avail / (1024 * 1024));
 }
 
+// Caps the requested heap so Java + JVM overhead + native GL/Metal buffers
+// always fit under the real Jetsam kill allowance. Returns the capped value.
 static int capAllocationToJetsamAllowance(int allocmem) {
-    size_t availMB = availableMemoryMB();
-    if (availMB > 0) {
-        int safeLimitMB = (int)availMB - 250;
-        if (safeLimitMB < 256) safeLimitMB = 256;
-        
-        if (allocmem > safeLimitMB) {
-            NSLog(@"[JavaLauncher] Jetsam cap applied: reducing allocation from %d MB to safe limit %d MB (Available: %zu MB)", allocmem, safeLimitMB, availMB);
-            return safeLimitMB;
+    if (getEntitlementValue(@"com.apple.private.memorystatus")) {
+        // updateJetsamControl() raised the task limit itself, no cap needed.
+        return allocmem;
+    }
+    size_t availableMem = availableMemoryMB();
+    if (availableMem > 0) {
+        int byAllowance = (int)((double)availableMem * 0.6);
+        if (byAllowance < allocmem) {
+            NSLog(@"[JavaLauncher] RAM capped: %d MB -> %d MB (only %zu MB left before the Jetsam kill limit; add the memorystatus entitlement to raise it)",
+                  allocmem, byAllowance, availableMem);
+            return (int)MAX(384, byAllowance);
         }
     }
     return allocmem;
@@ -389,31 +394,45 @@ int launchJVMWithArgs(NSString *username, id launchTarget, int width, int height
     }
 
     int allocmem;
-    BOOL hasMemoryEntitlement = getEntitlementValue(@"com.apple.private.memorystatus") ||
-                                getEntitlementValue(@"com.apple.developer.kernel.increased-memory-limit");
-
     NSLog(@"[JavaLauncher] Entitlements: memorystatus=%d increased-memory-limit=%d extended-virtual-addressing=%d disable-library-validation=%d",
         getEntitlementValue(@"com.apple.private.memorystatus"),
         getEntitlementValue(@"com.apple.developer.kernel.increased-memory-limit"),
         getEntitlementValue(@"com.apple.developer.kernel.extended-virtual-addressing"),
         getEntitlementValue(@"com.apple.security.cs.disable-library-validation"));
-
+        
     if (getPrefBool(@"java.auto_ram")) {
-        // Sử dụng tỷ lệ 0.25 nếu không có Entitlement mở rộng RAM (giữ bộ nhớ JVM < 750MB)
-        CGFloat autoRatio = hasMemoryEntitlement ? 0.4 : 0.25;
+        CGFloat autoRatio = getEntitlementValue(@"com.apple.private.memorystatus") ? 0.4 : 0.25;
         allocmem = roundf((NSProcessInfo.processInfo.physicalMemory / 1048576) * autoRatio);
+        // Auto sizing is derived from physical RAM, not from the process's
+        // Jetsam allowance, so it can over-allocate on sideloaded installs
+        // (no memorystatus entitlement) where the kill limit is fixed and
+        // low. Keep the allowance cap here to prevent launch-time Jetsam kills.
         allocmem = capAllocationToJetsamAllowance(allocmem);
     } else {
+        // Manual allocation: honor the user's setting as-is. The JVM commits
+        // heap lazily (ParallelGC), so -Xmx is a ceiling, not a preallocation.
+        // Just warn when the requested heap exceeds the actual Jetsam kill
+        // allowance so the user knows a memory-heavy session may be killed.
         allocmem = getPrefInt(@"java.allocated_memory");
-        // Kiểm tra trần Jetsam kể cả khi người dùng tự chỉnh RAM thủ công
-        allocmem = capAllocationToJetsamAllowance(allocmem);
+        if (!getEntitlementValue(@"com.apple.private.memorystatus")) {
+            size_t availableMem = availableMemoryMB();
+            if (availableMem > 0 && (size_t)allocmem > availableMem) {
+                NSLog(@"[JavaLauncher] Warning: requested %d MB heap exceeds the Jetsam kill allowance (~%zu MB); the game may be killed when its memory usage approaches the limit", allocmem, availableMem);
+                showDialog(localize(@"Warning", nil),
+                    [NSString stringWithFormat:@"You requested %d MB RAM, but the kill limit (Jetsam) of a Sideloaded install is only about %zu MB. Memory above this force-closes the game mid-play. Use Auto RAM or set a value below %zu MB.",
+                        allocmem, availableMem, availableMem]);
+            }
+        }
     }
-
     NSLog(@"[JavaLauncher] Max RAM allocation is set to %d MB", allocmem);
-
+    
     if (!validateVirtualMemorySpace(allocmem)) {
         UIKit_returnToSplitView();
-        showDialog(localize(@"Error", nil), @"Insufficient contiguous virtual memory space. Lower memory allocation and try again.");
+        if (getEntitlementValue(@"com.apple.developer.kernel.increased-memory-limit")) {
+            showDialog(localize(@"Error", nil), @"Insufficient contiguous virtual memory space. Lower memory allocation and try again.");
+        } else {
+            showDialog(localize(@"Error", nil), @"Insufficient contiguous virtual memory space. Increased Memory Limit entitlement is missing, please add it via GetMoreRam app.");
+        }
         return 1;
     }
 
